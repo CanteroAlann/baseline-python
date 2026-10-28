@@ -1,0 +1,8 @@
+*
+!src/
+!src/**
+**/__pycache__
+!tests/
+!tests/**
+!samples/
+!samples/*.csv

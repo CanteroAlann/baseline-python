@@ -1,0 +1,96 @@
+from common.enums import MsgType
+from common import custom_socket
+from common.article import ExternalArticle
+
+from . import external_serializer as serializer
+
+MAX_FIELD_SIZE = 64 * 1024 * 1024
+
+
+def _recv_uint32(sock):
+    return serializer.deserialize_uint32(custom_socket.recv_all(sock, serializer.UINT32_SIZE))
+
+
+def _recv_string(sock):
+    size = _recv_uint32(sock)
+    if size > MAX_FIELD_SIZE:
+        raise ValueError("Field exceeds maximum size")
+    return serializer.deserialize_string(custom_socket.recv_all(sock, size))
+
+
+def _serialize_bytes(data):
+    if len(data) > MAX_FIELD_SIZE:
+        raise ValueError("Field exceeds maximum size")
+    return serializer.serialize_uint32(len(data)) + data
+
+
+def _serialize_string(value):
+    return _serialize_bytes(serializer.serialize_string(value))
+
+
+def _recv_article_record(sock):
+    return ExternalArticle.deserialize(_recv_string(sock))
+
+
+def _recv_article_results(sock):
+    count = _recv_uint32(sock)
+    results = []
+    for _ in range(count):
+        url = _recv_string(sock)
+        date_modified = _recv_string(sock)
+        results.append((url, date_modified))
+    return results
+
+
+def _recv_empty(sock):
+    return None
+
+
+def _send_article_record(sock, article):
+    message = serializer.serialize_uint32(MsgType.ARTICLE_RECORD)
+    message += _serialize_bytes(article.serialize())
+    custom_socket.send_all(sock, message)
+
+
+def _send_article_results(sock, results):
+    message = serializer.serialize_uint32(MsgType.ARTICLE_RESULTS)
+    message += serializer.serialize_uint32(len(results))
+    custom_socket.send_all(sock, message)
+    for url, date_modified in results:
+        custom_socket.send_all(sock, _serialize_string(url) + _serialize_string(date_modified))
+
+
+def _send_ack(sock):
+    custom_socket.send_all(sock, serializer.serialize_uint32(MsgType.ACK))
+
+
+def _send_eof_records(sock):
+    custom_socket.send_all(sock, serializer.serialize_uint32(MsgType.EOF_RECORDS))
+
+
+RECV_MSG_HANDLERS = {
+    MsgType.ARTICLE_RECORD: _recv_article_record,
+    MsgType.ARTICLE_RESULTS: _recv_article_results,
+    MsgType.ACK: _recv_empty,
+    MsgType.EOF_RECORDS: _recv_empty,
+}
+
+SEND_MSG_HANDLERS = {
+    MsgType.ARTICLE_RECORD: _send_article_record,
+    MsgType.ARTICLE_RESULTS: _send_article_results,
+    MsgType.ACK: _send_ack,
+    MsgType.EOF_RECORDS: _send_eof_records,
+}
+
+
+def recv_msg(sock):
+    msg_type = MsgType(_recv_uint32(sock))
+    if msg_type not in RECV_MSG_HANDLERS:
+        raise ValueError(f"Unknown message type: {msg_type}")
+    return msg_type, RECV_MSG_HANDLERS[msg_type](sock)
+
+
+def send_msg(sock, msg_type, *args):
+    if msg_type not in SEND_MSG_HANDLERS:
+        raise ValueError(f"Unknown message type: {msg_type}")
+    SEND_MSG_HANDLERS[msg_type](sock, *args)
