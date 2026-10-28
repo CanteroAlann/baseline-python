@@ -1,6 +1,6 @@
 FROM python:3-alpine
+RUN pip3 install pika
 WORKDIR /app
-ENV PYTHONUNBUFFERED=1
 COPY src/common common
 COPY src/gateway gateway
 EXPOSE 5000
