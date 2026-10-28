@@ -1,8 +1,8 @@
-from common.article import CleanArticle
+from common.article import ExternalArticle
 from filters.filter_node import FilterNode
 
 
-def filter_by_year(article: CleanArticle) -> bool:
+def filter_by_year(article: ExternalArticle) -> bool:
     year = article.date_modified_year
     return year is not None and year <= 2020
 

@@ -19,12 +19,12 @@ def handle_client_request(client_socket, output_queue, input_queue):
         if msg_type == MsgType.ARTICLE_RECORD:
             output_queue.send(handler.serialize_data_message(article))
             logging.info(
-                "Published article to preprocess session=%s name=%r",
+                "Published article to year filter session=%s name=%r",
                 handler.session_id, article.data["name"],
             )
         elif msg_type == MsgType.EOF_RECORDS:
             output_queue.send(handler.serialize_eof_message())
-            logging.info("Published EOF to preprocess session=%s", handler.session_id)
+            logging.info("Published EOF to year filter session=%s", handler.session_id)
             break
         else:
             raise ValueError("Expected ARTICLE_RECORD or EOF_RECORDS")

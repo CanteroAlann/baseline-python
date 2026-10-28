@@ -1,7 +1,7 @@
 from common.enums import MsgType
 import logging
 
-from common.article import CleanArticle
+from common.article import ExternalArticle
 from common.message_protocol import internal
 
 
@@ -12,7 +12,7 @@ class FilterNode:
         self.filter_function = filter_function
 
     def process_message(self, body, ack, nack):
-        message = internal.deserialize(body, CleanArticle)
+        message = internal.deserialize(body, ExternalArticle)
         if message["type"] == MsgType.ARTICLE_RECORD:
             article = message["article"]
             if not self.filter_function(article):

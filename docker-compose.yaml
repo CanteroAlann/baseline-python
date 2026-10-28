@@ -25,18 +25,6 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
-  preprocess:
-    build:
-      context: .
-      dockerfile: src/preprocess/Dockerfile
-    environment:
-      PYTHONUNBUFFERED: "1"
-      MOM_HOST: rabbitmq
-      INPUT_QUEUE: articles
-      OUTPUT_QUEUE: processed_articles
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
   year-filter:
     build:
       context: .
@@ -44,7 +32,7 @@ services:
     environment:
       PYTHONUNBUFFERED: "1"
       MOM_HOST: rabbitmq
-      INPUT_QUEUE: processed_articles
+      INPUT_QUEUE: articles
       OUTPUT_QUEUE: year_filtered_articles
     depends_on:
       rabbitmq:
@@ -74,6 +62,16 @@ services:
       - ./samples:/data:ro
     depends_on:
       - gateway
-      - preprocess
       - year-filter
       - language-filter
+  tests:
+    profiles: ["test"]
+    build:
+      context: .
+      dockerfile: tests/Dockerfile
+    environment:
+      PYTHONUNBUFFERED: "1"
+      MOM_HOST: rabbitmq
+    depends_on:
+      rabbitmq:
+        condition: service_healthy

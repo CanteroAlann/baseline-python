@@ -1,8 +1,8 @@
-from common.article import CleanArticle
+from common.article import ExternalArticle
 from filters.filter_node import FilterNode
 
 
-def filter_by_language(article: CleanArticle) -> bool:
+def filter_by_language(article: ExternalArticle) -> bool:
     return article.in_language is not None and article.in_language.lower() == "en"
 
 
