@@ -57,11 +57,11 @@ def _handle_client_request(client_socket, output_queue, input_queue, handler):
         if message is None:
             ack()
             return
-        if message["type"] == MsgType.ARTICLE_RECORD:
-            results.append((message["article_id"], message["article"].url,
-                            message["article"].date_modified))
-        elif message["type"] == MsgType.EOF_RECORDS:
-            expected = non_negative(message["expected_messages"], "expected_messages")
+        if message.is_article():
+            article = message.require_article()
+            results.append((message.article_id, article.url, article.date_modified))
+        elif message.is_eof():
+            expected = non_negative(message.expected_messages, "expected_messages")
         else:
             raise ValueError("Unexpected result message")
 

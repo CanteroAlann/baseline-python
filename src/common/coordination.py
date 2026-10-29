@@ -1,4 +1,5 @@
 from common.enums import MsgType
+from common.message import Message
 
 
 def non_negative(value, name):
@@ -15,20 +16,20 @@ class Coordinator:
         self.routing_keys = tuple(routing_keys)
         self.sessions = {}
 
-    def handle(self, message):
-        if message["type"] not in (MsgType.INPUT_EOF, MsgType.DONE):
+    def handle(self, message: Message):
+        if not (message.is_input_eof() or message.is_done()):
             raise ValueError("Expected INPUT_EOF or DONE")
-        session_id = message["session_id"]
+        session_id = message.session_id
         if not isinstance(session_id, str) or not session_id:
             raise ValueError("session_id must be a nonempty string")
         state = self.sessions.setdefault(session_id, {
             "expected": None, "processed": 0,
             "outputs": dict.fromkeys(self.routing_keys or ("output",), 0),
         })
-        if message["type"] == MsgType.INPUT_EOF:
-            state["expected"] = non_negative(message["expected_messages"], "expected_messages")
+        if message.is_input_eof():
+            state["expected"] = non_negative(message.expected_messages, "expected_messages")
         else:
-            output = message["output"]
+            output = message.output
             if output is not None and output not in state["outputs"]:
                 raise ValueError("Unknown article output")
             state["processed"] += 1
@@ -43,6 +44,5 @@ class Coordinator:
             return
         for output, count in state["outputs"].items():
             route = output if self.routing_keys else session_id
-            self.emit({"type": MsgType.EOF_RECORDS, "session_id": session_id,
-                       "expected_messages": count}, route)
+            self.emit(Message(MsgType.EOF_RECORDS, session_id, expected_messages=count), route)
         del self.sessions[session_id]
