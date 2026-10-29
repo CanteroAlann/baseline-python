@@ -11,7 +11,7 @@ services:
       timeout: 3s
       retries: 10
       start_period: 50s
-  gateway:
+  gateway_1:
     build:
       context: .
       dockerfile: src/gateway/Dockerfile
@@ -39,7 +39,7 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
-  year-filter:
+  year-filter_1:
     build:
       context: .
       dockerfile: src/filters/year_filter/Dockerfile
@@ -55,7 +55,7 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
-  language-filter:
+  language-filter_1:
     build:
       context: .
       dockerfile: src/filters/language_filter/Dockerfile
@@ -69,33 +69,33 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
-  client:
+  client_1:
     build:
       context: .
       dockerfile: src/client/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
       INPUT_FILE: /data/file1.csv
-      SERVER_HOST: gateway
+      SERVER_HOST: gateway_1
       SERVER_PORT: "5000"
     volumes:
       - ./samples:/data:ro
     depends_on:
-      - gateway
-      - year-filter
-      - language-filter
+      - gateway_1
+      - year-filter_1
+      - language-filter_1
   client_2:
     build:
       context: .
       dockerfile: src/client/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
-      INPUT_FILE: /data/file_multi.csv
+      INPUT_FILE: /data/file2.csv
       SERVER_HOST: gateway_2
       SERVER_PORT: "5000"
     volumes:
       - ./samples:/data:ro
     depends_on:
       - gateway_2
-      - year-filter
-      - language-filter
+      - year-filter_1
+      - language-filter_1
