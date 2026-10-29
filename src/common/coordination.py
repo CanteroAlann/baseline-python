@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 from common.enums import MsgType
 from common.message import Message
 
@@ -8,13 +10,37 @@ def non_negative(value, name):
     return value
 
 
+@dataclass
+class CoordinatorState:
+    outputs: dict[str, int]
+    expected: int | None = None
+    processed: int = 0
+
+    def set_expected_count(self, expected: int | None) -> None:
+        self.expected = non_negative(expected, "expected_messages")
+
+    def record_done(self, output: str | None) -> None:
+        if output is not None and output not in self.outputs:
+            raise ValueError("Unknown article output")
+        self.processed += 1
+        if output is not None:
+            self.outputs[output] += 1
+
+    def is_complete(self) -> bool:
+        if self.expected is None:
+            return False
+        if self.processed > self.expected:
+            raise ValueError("More DONE messages than expected inputs")
+        return self.processed == self.expected
+
+
 class Coordinator:
     """Count DONE controls per session. emit waits for publisher confirms."""
 
     def __init__(self, emit, routing_keys=()):
         self.emit = emit
         self.routing_keys = tuple(routing_keys)
-        self.sessions = {}
+        self.sessions: dict[str, CoordinatorState] = {}
 
     def handle(self, message: Message):
         if not (message.is_input_eof() or message.is_done()):
@@ -22,27 +48,17 @@ class Coordinator:
         session_id = message.session_id
         if not isinstance(session_id, str) or not session_id:
             raise ValueError("session_id must be a nonempty string")
-        state = self.sessions.setdefault(session_id, {
-            "expected": None, "processed": 0,
-            "outputs": dict.fromkeys(self.routing_keys or ("output",), 0),
-        })
+        state = self.sessions.setdefault(session_id, CoordinatorState(
+            outputs=dict.fromkeys(self.routing_keys or ("output",), 0),
+        ))
         if message.is_input_eof():
-            state["expected"] = non_negative(message.expected_messages, "expected_messages")
+            state.set_expected_count(message.expected_messages)
         else:
-            output = message.output
-            if output is not None and output not in state["outputs"]:
-                raise ValueError("Unknown article output")
-            state["processed"] += 1
-            if output is not None:
-                state["outputs"][output] += 1
+            state.record_done(message.output)
 
-        if state["expected"] is None:
+        if not state.is_complete():
             return
-        if state["processed"] > state["expected"]:
-            raise ValueError("More DONE messages than expected inputs")
-        if state["processed"] != state["expected"]:
-            return
-        for output, count in state["outputs"].items():
+        for output, count in state.outputs.items():
             route = output if self.routing_keys else session_id
             self.emit(Message(MsgType.EOF_RECORDS, session_id, expected_messages=count), route)
         del self.sessions[session_id]
