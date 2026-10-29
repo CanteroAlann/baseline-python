@@ -9,9 +9,10 @@ from .middleware import (
 
 
 class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
-    def __init__(self, host, queue_name, connection=None):
+    def __init__(self, host, queue_name, connection=None, exclusive=False):
         self.host = host
         self.queue_name = queue_name
+        self.exclusive = exclusive
         self.owns_connection = connection is None
         self.connection = connection
         self.channel = None
@@ -19,15 +20,17 @@ class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
             if self.connection is None:
                 self.connection = pika.BlockingConnection(pika.ConnectionParameters(host=host))
             self.channel = self.connection.channel()
-            self.channel.queue_declare(queue=queue_name)
+            self.channel.queue_declare(queue=queue_name, exclusive=exclusive)
             self.channel.basic_qos(prefetch_count=1)
             self.channel.confirm_delivery()
         except pika.exceptions.AMQPError as exc:
             self.close()
             raise MessageMiddlewareDisconnectedError(str(exc)) from exc
 
-    def create_queue(self, queue_name):
-        return MessageMiddlewareQueueRabbitMQ(self.host, queue_name, self.connection)
+    def create_queue(self, queue_name, exclusive=False):
+        return MessageMiddlewareQueueRabbitMQ(
+            self.host, queue_name, self.connection, exclusive=exclusive,
+        )
 
     def create_exchange(self, exchange_name):
         return MessageMiddlewareExchangeRabbitMQ(self.connection, exchange_name)
@@ -87,6 +90,8 @@ class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
                 if self.connection.is_open:
                     self.connection.close()
             elif self.channel is not None and self.channel.is_open:
+                if self.exclusive:
+                    self.channel.queue_delete(queue=self.queue_name)
                 self.channel.close()
         except pika.exceptions.AMQPError as exc:
             raise MessageMiddlewareCloseError(str(exc)) from exc
@@ -114,11 +119,11 @@ class MessageMiddlewareExchangeRabbitMQ:
         except pika.exceptions.AMQPError as exc:
             raise MessageMiddlewareDisconnectedError(str(exc)) from exc
 
-    def send(self, message, routing_key):
+    def send(self, message, routing_key, mandatory=True):
         try:
             self.channel.basic_publish(
                 exchange=self.exchange_name, routing_key=routing_key,
-                body=message, mandatory=True,
+                body=message, mandatory=mandatory,
             )
         except pika.exceptions.AMQPConnectionError as exc:
             raise MessageMiddlewareDisconnectedError(str(exc)) from exc

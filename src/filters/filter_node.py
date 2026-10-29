@@ -28,12 +28,15 @@ class FilterNode:
             )
         elif message["type"] != MsgType.EOF_RECORDS:
             raise ValueError("Expected ARTICLE_RECORD or EOF_RECORDS")
-        self.output_queue.send(body)
+        self.publish_message(body, message)
         logging.info(
             "%s published %s session=%s",
             type(self).__name__, message["type"].name, message["session_id"],
         )
         ack()
+
+    def publish_message(self, body, message):
+        self.output_queue.send(body)
 
     def start(self):
         self.input_queue.start_consuming(self.process_message)

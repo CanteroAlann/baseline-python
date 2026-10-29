@@ -1,0 +1,4 @@
+abstract,additional_entities,date_created,date_modified,description,event,identifier,image,in_language,infoboxes,is_part_of,license,main_entity,name,references,sections,tables,url,version
+Mock English article 1 for concurrent client testing.,,,2018-03-15 10:30:00,,,,,"{""identifier"":""en""}",,,,,Mock article 1,,[],,https://example.com/multi/article-1,
+Mock English article 2 for concurrent client testing.,,,2019-06-20 14:45:00,,,,,"{""identifier"":""en""}",,,,,Mock article 2,,[],,https://example.com/multi/article-2,
+Mock English article 3 for concurrent client testing.,,,2020-12-31 23:59:59,,,,,"{""identifier"":""en""}",,,,,Mock article 3,,[],,https://example.com/multi/article-3,
