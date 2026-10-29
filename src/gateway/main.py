@@ -24,13 +24,16 @@ def handle_client_request(client_socket, output_queue, input_queue=None):
             "Bound private results queue=%s session=%s",
             input_queue.queue_name, handler.session_id,
         )
-        _handle_client_request(client_socket, output_queue, input_queue, handler)
+        _process_client_request(client_socket, output_queue, input_queue, handler)
     finally:
         if owns_queue:
             input_queue.close()
 
 
-def _handle_client_request(client_socket, output_queue, input_queue, handler):
+"""
+bloque de recepción de mensajes del cliente y publicación en la cola de salida
+"""
+def _process_client_request(client_socket, output_queue, input_queue, handler):
     logging.info("Started client session=%s", handler.session_id)
     while True:
         msg_type, article = protocol.recv_msg(client_socket)

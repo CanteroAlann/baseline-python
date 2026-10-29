@@ -47,6 +47,7 @@ def year_filter(index):
       OUTPUT_EXCHANGE: articles_by_year
       PRE2020_QUEUE: articles_pre2020
       POST2020_QUEUE: articles_post2020
+      BIOGRAPHY_QUEUE: articles_biography
       PRE2020_ROUTING_KEY: article.pre2020
       POST2020_ROUTING_KEY: article.post2020
     depends_on:
@@ -73,6 +74,42 @@ def language_filter(index):
 """
 
 
+def biography_filter(index):
+    return f"""  biography-filter_{index}:
+    build:
+      context: .
+      dockerfile: src/filters/biography_filter/Dockerfile
+    environment:
+      PYTHONUNBUFFERED: "1"
+      MOM_HOST: rabbitmq
+      INPUT_QUEUE: articles_biography
+      OUTPUT_QUEUE: q2_image_requests
+      INPUT_EXCHANGE: articles_by_year
+      INPUT_ROUTING_KEY: article.pre2020
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+"""
+
+
+def image_fetcher(index):
+    return f"""  image-fetcher_{index}:
+    build:
+      context: .
+      dockerfile: src/filters/image_fetcher/Dockerfile
+    environment:
+      PYTHONUNBUFFERED: "1"
+      MOM_HOST: rabbitmq
+      INPUT_QUEUE: q2_image_requests
+      OUTPUT_EXCHANGE: article_results
+      IMAGE_FETCH_TIMEOUT: "15"
+      IMAGE_MAX_BYTES: "20971520"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+"""
+
+
 def client(index, filter_names):
     dependencies = "\n".join(f"      - {name}" for name in filter_names)
     return f"""  client_{index}:
@@ -86,6 +123,7 @@ def client(index, filter_names):
       SERVER_PORT: "5000"
     volumes:
       - ./samples:/data:ro
+      - ./output:/output
     depends_on:
       - gateway_{index}
 {dependencies}
@@ -96,12 +134,15 @@ def generate_compose(clients, year_filters, language_filters):
     services = ["services:\n", RABBITMQ]
     filter_names = [f"year-filter_{index}" for index in range(1, year_filters + 1)]
     filter_names += [f"language-filter_{index}" for index in range(1, language_filters + 1)]
+    filter_names += ["biography-filter_1", "image-fetcher_1"]
     for index in range(1, clients + 1):
         services.append(gateway(index))
     for index in range(1, year_filters + 1):
         services.append(year_filter(index))
     for index in range(1, language_filters + 1):
         services.append(language_filter(index))
+    services.append(biography_filter(1))
+    services.append(image_fetcher(1))
     for index in range(1, clients + 1):
         services.append(client(index, filter_names))
     return "".join(services)
