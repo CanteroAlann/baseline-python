@@ -29,6 +29,18 @@ class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
     def create_queue(self, queue_name):
         return MessageMiddlewareQueueRabbitMQ(self.host, queue_name, self.connection)
 
+    def create_exchange(self, exchange_name):
+        return MessageMiddlewareExchangeRabbitMQ(self.connection, exchange_name)
+
+    def bind_exchange(self, exchange_name, routing_key):
+        try:
+            self.channel.exchange_declare(exchange=exchange_name, exchange_type="topic")
+            self.channel.queue_bind(
+                queue=self.queue_name, exchange=exchange_name, routing_key=routing_key,
+            )
+        except pika.exceptions.AMQPError as exc:
+            raise MessageMiddlewareDisconnectedError(str(exc)) from exc
+
     def send(self, message):
         try:
             self.channel.basic_publish(
@@ -75,6 +87,47 @@ class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
                 if self.connection.is_open:
                     self.connection.close()
             elif self.channel is not None and self.channel.is_open:
+                self.channel.close()
+        except pika.exceptions.AMQPError as exc:
+            raise MessageMiddlewareCloseError(str(exc)) from exc
+
+
+class MessageMiddlewareExchangeRabbitMQ:
+    def __init__(self, connection, exchange_name):
+        self.connection = connection
+        self.exchange_name = exchange_name
+        self.channel = None
+        try:
+            self.channel = connection.channel()
+            self.channel.exchange_declare(exchange=exchange_name, exchange_type="topic")
+            self.channel.confirm_delivery()
+        except pika.exceptions.AMQPError as exc:
+            self.close()
+            raise MessageMiddlewareDisconnectedError(str(exc)) from exc
+
+    def bind_queue(self, queue_name, routing_key):
+        try:
+            self.channel.queue_declare(queue=queue_name)
+            self.channel.queue_bind(
+                queue=queue_name, exchange=self.exchange_name, routing_key=routing_key,
+            )
+        except pika.exceptions.AMQPError as exc:
+            raise MessageMiddlewareDisconnectedError(str(exc)) from exc
+
+    def send(self, message, routing_key):
+        try:
+            self.channel.basic_publish(
+                exchange=self.exchange_name, routing_key=routing_key,
+                body=message, mandatory=True,
+            )
+        except pika.exceptions.AMQPConnectionError as exc:
+            raise MessageMiddlewareDisconnectedError(str(exc)) from exc
+        except pika.exceptions.AMQPError as exc:
+            raise MessageMiddlewareMessageError(str(exc)) from exc
+
+    def close(self):
+        try:
+            if self.channel is not None and self.channel.is_open:
                 self.channel.close()
         except pika.exceptions.AMQPError as exc:
             raise MessageMiddlewareCloseError(str(exc)) from exc
