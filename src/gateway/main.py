@@ -11,20 +11,38 @@ from common.enums import ExitCode, MsgType
 from .message_handler import MessageHandler
 
 
-def handle_client_request(client_socket, output_queue, input_queue):
+def handle_client_request(client_socket, output_queue, input_queue=None):
     handler = MessageHandler()
+    owns_queue = input_queue is None
+    if owns_queue:
+        input_queue = output_queue.create_queue(
+            f"{RESULT_EXCHANGE}.{handler.session_id}", exclusive=True,
+        )
+    try:
+        input_queue.bind_exchange(RESULT_EXCHANGE, handler.session_id)
+        logging.info(
+            "Bound private results queue=%s session=%s",
+            input_queue.queue_name, handler.session_id,
+        )
+        _handle_client_request(client_socket, output_queue, input_queue, handler)
+    finally:
+        if owns_queue:
+            input_queue.close()
+
+
+def _handle_client_request(client_socket, output_queue, input_queue, handler):
     logging.info("Started client session=%s", handler.session_id)
     while True:
         msg_type, article = protocol.recv_msg(client_socket)
         if msg_type == MsgType.ARTICLE_RECORD:
             output_queue.send(handler.serialize_data_message(article))
             logging.info(
-                "Published article to preprocess session=%s name=%r",
+                "Published article to year filter session=%s name=%r",
                 handler.session_id, article.data["name"],
             )
         elif msg_type == MsgType.EOF_RECORDS:
             output_queue.send(handler.serialize_eof_message())
-            logging.info("Published EOF to preprocess session=%s", handler.session_id)
+            logging.info("Published EOF to year filter session=%s", handler.session_id)
             break
         else:
             raise ValueError("Expected ARTICLE_RECORD or EOF_RECORDS")
@@ -71,34 +89,30 @@ SERVER_PORT = int(os.environ["SERVER_PORT"])
 SOCKET_TIMEOUT = float(os.getenv("SOCKET_TIMEOUT", "120"))
 
 MOM_HOST = os.environ["MOM_HOST"]
-INPUT_QUEUE = os.environ["INPUT_QUEUE"]
+RESULT_EXCHANGE = os.environ["RESULT_EXCHANGE"]
 OUTPUT_QUEUE = os.environ["OUTPUT_QUEUE"]
 
 def main():
     logging.basicConfig(level=logging.INFO)
     signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(ExitCode.SUCCESS))
-    input_queue = middleware.MessageMiddlewareQueueRabbitMQ(MOM_HOST, INPUT_QUEUE)
+    output_queue = middleware.MessageMiddlewareQueueRabbitMQ(MOM_HOST, OUTPUT_QUEUE)
     try:
-        output_queue = input_queue.create_queue(OUTPUT_QUEUE)
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
-                server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                server_socket.bind((SERVER_HOST, SERVER_PORT))
-                server_socket.listen(1)
-                logging.info("Listening on %s:%d", SERVER_HOST, SERVER_PORT)
-                while True:
-                    client_socket, address = server_socket.accept()
-                    with client_socket:
-                        client_socket.settimeout(SOCKET_TIMEOUT)
-                        logging.info("Client connected: %s", address)
-                        try:
-                            handle_client_request(client_socket, output_queue, input_queue)
-                        except (OSError, EOFError, ValueError, SyntaxError, TypeError, KeyError) as exc:
-                            logging.warning("Client session ended: %s", exc)
-        finally:
-            output_queue.close()
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
+            server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            server_socket.bind((SERVER_HOST, SERVER_PORT))
+            server_socket.listen(1)
+            logging.info("Listening on %s:%d", SERVER_HOST, SERVER_PORT)
+            while True:
+                client_socket, address = server_socket.accept()
+                with client_socket:
+                    client_socket.settimeout(SOCKET_TIMEOUT)
+                    logging.info("Client connected: %s", address)
+                    try:
+                        handle_client_request(client_socket, output_queue)
+                    except (OSError, EOFError, ValueError, SyntaxError, TypeError, KeyError) as exc:
+                        logging.warning("Client session ended: %s", exc)
     finally:
-        input_queue.close()
+        output_queue.close()
 
 
 if __name__ == "__main__":

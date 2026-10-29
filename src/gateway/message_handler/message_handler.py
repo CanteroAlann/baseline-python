@@ -1,7 +1,7 @@
 from common.enums import MsgType
 import uuid
 
-from common.article import CleanArticle
+from common.article import ExternalArticle
 from common.message_protocol import internal
 
 
@@ -24,5 +24,5 @@ class MessageHandler:
         if message["session_id"] != self.session_id:
             return None
         if "article" in message:
-            message["article"] = CleanArticle.from_dict(message["article"])
+            message["article"] = ExternalArticle.from_dict(message["article"])
         return message

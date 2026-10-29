@@ -50,6 +50,27 @@ def has_biography_section(sections: list[dict[str, Any]]) -> bool:
 class ExternalArticle(Article):
     data: dict[str, Any]
 
+    @property
+    def name(self) -> str:
+        return self.data["name"]
+
+    @property
+    def url(self) -> str:
+        return self.data.get("url", "")
+
+    @property
+    def date_modified(self) -> str | None:
+        return self.data.get("date_modified") or None
+
+    @property
+    def date_modified_year(self) -> int | None:
+        modified = self.data.get("date_modified") or None
+        return datetime.fromisoformat(modified).year if modified else None
+
+    @property
+    def in_language(self) -> str | None:
+        return in_language_parse(parse_field(self.data.get("in_language")))
+
     def to_dict(self) -> dict[str, Any]:
         return self.data
 
