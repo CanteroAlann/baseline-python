@@ -16,6 +16,7 @@ class YearFilterNode:
 
     def process_message(self, body, ack, nack):
         message = internal.deserialize(body, ExternalArticle)
+        logging.info("New message received: %s, session=%s", message["type"].name, message["session_id"])
         if message["type"] == MsgType.ARTICLE_RECORD:
             article = message["article"]
             year = article.date_modified_year

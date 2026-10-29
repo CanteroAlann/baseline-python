@@ -22,6 +22,7 @@ def run_node(node_class, output_factory=None):
     try:
         if INPUT_EXCHANGE:
             input_queue.bind_exchange(INPUT_EXCHANGE, INPUT_ROUTING_KEY)
+        # TODO: validar si OUTPUT_EXCHANGE existe como variable de entorno y está declarada
         output_queue = (
             output_factory(input_queue) if output_factory is not None
             else input_queue.create_queue(OUTPUT_QUEUE)
