@@ -7,10 +7,9 @@ def filter_by_language(article: ExternalArticle) -> bool:
 
 
 class LanguageFilterNode(FilterNode):
-    def __init__(self, input_queue, output_queue):
-        super().__init__(input_queue, output_queue, filter_by_language)
+    def __init__(self, input_queue, output_queue, coordinator_queue):
+        super().__init__(input_queue, output_queue, filter_by_language, coordinator_queue)
 
     def publish_message(self, body, message):
-        # The gateway deletes its private queue when the session ends.
-        # Discard unroutable late replies so other sessions can keep being processed.
+        # The gateway deletes private queue when the session ends. Discard unroutable late replies
         self.output_queue.send(body, routing_key=message["session_id"], mandatory=False)

@@ -11,3 +11,5 @@ class MsgType(IntEnum):
     ARTICLE_RESULTS = 2
     ACK = 3
     EOF_RECORDS = 4
+    INPUT_EOF = 5
+    DONE = 6

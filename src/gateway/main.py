@@ -7,6 +7,7 @@ import sys
 from common import middleware
 from common.message_protocol import external as protocol
 from common.enums import ExitCode, MsgType
+from common.coordination import non_negative
 
 from .message_handler import MessageHandler
 
@@ -48,22 +49,28 @@ def _handle_client_request(client_socket, output_queue, input_queue, handler):
             raise ValueError("Expected ARTICLE_RECORD or EOF_RECORDS")
 
     results = []
+    expected = None
 
     def consume_result(body, ack, nack):
+        nonlocal expected
         message = handler.deserialize_result_message(body)
         if message is None:
             ack()
             return
         if message["type"] == MsgType.ARTICLE_RECORD:
-            results.append((message["article"].url, message["article"].date_modified))
-            logging.info(
-                "Received matching article session=%s name=%r",
-                handler.session_id, message["article"].name,
-            )
-            ack()
+            results.append((message["article_id"], message["article"].url,
+                            message["article"].date_modified))
         elif message["type"] == MsgType.EOF_RECORDS:
-            logging.info("Received EOF from filters session=%s", handler.session_id)
-            protocol.send_msg(client_socket, MsgType.ARTICLE_RESULTS, results)
+            expected = non_negative(message["expected_messages"], "expected_messages")
+        else:
+            raise ValueError("Unexpected result message")
+
+        if expected is not None and len(results) > expected:
+            raise ValueError("More results than expected")
+        if expected is not None and len(results) == expected:
+            # Keep the original input order when workers finish out of order.
+            ordered_results = [(url, date) for _, url, date in sorted(results)]
+            protocol.send_msg(client_socket, MsgType.ARTICLE_RESULTS, ordered_results)
             logging.info(
                 "Sent %d article results to client session=%s",
                 len(results), handler.session_id,
@@ -74,9 +81,8 @@ def _handle_client_request(client_socket, output_queue, input_queue, handler):
             logging.info("Client acknowledged results session=%s", handler.session_id)
             ack()
             input_queue.stop_consuming()
-        else:
-            nack()
-            raise ValueError("Unexpected result message")
+            return
+        ack()
 
     try:
         input_queue.start_consuming(consume_result)
@@ -86,7 +92,7 @@ def _handle_client_request(client_socket, output_queue, input_queue, handler):
 
 SERVER_HOST = os.environ["SERVER_HOST"]
 SERVER_PORT = int(os.environ["SERVER_PORT"])
-SOCKET_TIMEOUT = float(os.getenv("SOCKET_TIMEOUT", "120"))
+SOCKET_TIMEOUT = float(os.environ.get("SOCKET_TIMEOUT", "120"))
 
 MOM_HOST = os.environ["MOM_HOST"]
 RESULT_EXCHANGE = os.environ["RESULT_EXCHANGE"]
