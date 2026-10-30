@@ -13,3 +13,9 @@ class MsgType(IntEnum):
     EOF_RECORDS = 4
     INPUT_EOF = 5
     DONE = 6
+    QUERY_RESULT = 7
+    QUERY_EOF = 8
+
+
+QUERY_IDS = (1, 2, 3, 4, 5)
+QUERY_COUNT = 1  # Increase as the other queries are implemented.

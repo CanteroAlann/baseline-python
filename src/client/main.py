@@ -17,7 +17,7 @@ def main():
     try:
         client.connect(SERVER_HOST, SERVER_PORT)
         client.send_article_records(INPUT_FILE)
-        client.recv_article_results()
+        client.recv_query_results()
     except (OSError, EOFError, ValueError, KeyError, csv.Error) as exc:
         logging.error("Client failed: %s", exc)
         return ExitCode.ERROR

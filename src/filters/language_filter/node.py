@@ -1,5 +1,7 @@
 from common.article import CleanArticle, ExternalArticle
 from common.message import Message
+from common.enums import MsgType
+from common.message_protocol import internal
 from filters.filter_node import FilterNode
 
 
@@ -12,5 +14,9 @@ class LanguageFilterNode(FilterNode):
         super().__init__(input_queue, output_queue, filter_by_language, coordinator_queue)
 
     def publish_message(self, body: bytes, message: Message):
+        article = message.require_article()
+        result = Message(MsgType.QUERY_RESULT, message.session_id, query_id=1,
+                         article_id=message.article_id,
+                         result={"url": article.url, "date_modified": article.date_modified})
         # The gateway deletes private queue when the session ends. Discard unroutable late replies
-        self.output_queue.send(body, routing_key=message.session_id, mandatory=False)
+        self.output_queue.send(internal.serialize(result), routing_key=message.session_id, mandatory=False)
