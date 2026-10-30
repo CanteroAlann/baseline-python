@@ -8,6 +8,8 @@ RABBITMQ = """  rabbitmq:
     build:
       context: .
       dockerfile: src/rabbitmq/Dockerfile
+    ports:
+      - "127.0.0.1:15672:15672"
     environment:
       RABBITMQ_LOG_LEVELS: error
     healthcheck:
