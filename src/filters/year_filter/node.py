@@ -1,3 +1,4 @@
+import logging
 import os
 
 from common.message_protocol import internal
@@ -13,9 +14,18 @@ class YearFilterNode(FilterNode):
         super().__init__(input_queue, output_exchange, None, coordinator_queue)
 
     def process_article(self, message: Message) -> str | None:
-        year = message.require_article().date_modified_year
+        article = message.require_article()
+        year = article.date_modified_year
         if year is None:
+            logging.info(
+                "YearFilterNode discarded undated article session=%s article_id=%s name=%r",
+                message.session_id, message.article_id, article.name,
+            )
             return None
         route = PRE2020_ROUTING_KEY if year <= 2020 else POST2020_ROUTING_KEY
         self.output_queue.send(internal.serialize(message), routing_key=route)
+        logging.info(
+            "YearFilterNode forwarded article session=%s article_id=%s name=%r year=%s routing_key=%s",
+            message.session_id, message.article_id, article.name, year, route,
+        )
         return route

@@ -41,6 +41,20 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
+  gateway_3:
+    build:
+      context: .
+      dockerfile: src/gateway/Dockerfile
+    environment:
+      PYTHONUNBUFFERED: "1"
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: "5000"
+      MOM_HOST: rabbitmq
+      RESULT_EXCHANGE: article_results
+      OUTPUT_QUEUE: articles
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
   coordinator_year:
     build:
       context: .
@@ -301,6 +315,33 @@ services:
       - ./samples:/data:ro
     depends_on:
       - gateway_2
+      - year-filter_1
+      - year-filter_2
+      - year-filter_3
+      - year-filter_4
+      - year-filter_5
+      - year-filter_6
+      - language-filter_1
+      - language-filter_2
+      - language-filter_3
+      - language-filter_4
+      - language-filter_5
+      - language-filter_6
+      - coordinator_year
+      - coordinator_language
+  client_3:
+    build:
+      context: .
+      dockerfile: src/client/Dockerfile
+    environment:
+      PYTHONUNBUFFERED: "1"
+      INPUT_FILE: /data/file3.csv
+      SERVER_HOST: gateway_3
+      SERVER_PORT: "5000"
+    volumes:
+      - ./samples:/data:ro
+    depends_on:
+      - gateway_3
       - year-filter_1
       - year-filter_2
       - year-filter_3
