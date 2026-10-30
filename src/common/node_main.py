@@ -8,9 +8,10 @@ from common.enums import ExitCode
 
 MOM_HOST = os.environ["MOM_HOST"]
 INPUT_QUEUE = os.environ["INPUT_QUEUE"]
-OUTPUT_QUEUE = os.getenv("OUTPUT_QUEUE")
-INPUT_EXCHANGE = os.getenv("INPUT_EXCHANGE")
-INPUT_ROUTING_KEY = os.getenv("INPUT_ROUTING_KEY")
+OUTPUT_QUEUE = os.environ.get("OUTPUT_QUEUE")
+INPUT_EXCHANGE = os.environ.get("INPUT_EXCHANGE")
+INPUT_ROUTING_KEY = os.environ.get("INPUT_ROUTING_KEY")
+COORDINATOR_QUEUE = os.environ.get("COORDINATOR_QUEUE")
 
 
 def run_node(node_class, output_factory=None):
@@ -27,8 +28,14 @@ def run_node(node_class, output_factory=None):
             else input_queue.create_queue(OUTPUT_QUEUE)
         )
         try:
-            logging.info("%s waiting for articles", node_class.__name__)
-            node_class(input_queue, output_queue).start()
+            control = input_queue.create_queue(COORDINATOR_QUEUE) if COORDINATOR_QUEUE else None
+            try:
+                logging.info("%s waiting for articles", node_class.__name__)
+                args = (input_queue, output_queue, control) if control else (input_queue, output_queue)
+                node_class(*args).start()
+            finally:
+                if control:
+                    control.close()
         finally:
             output_queue.close()
     finally:

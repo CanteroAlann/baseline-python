@@ -1,4 +1,3 @@
-from common.enums import MsgType
 import logging
 
 from common.article import ExternalArticle
@@ -14,23 +13,27 @@ class PreprocessNode:
 
     def process_message(self, body, ack, nack):
         message = internal.deserialize(body, ExternalArticle)
-        if message["type"] == MsgType.ARTICLE_RECORD:
+        if message.is_article():
+            article = message.require_article()
+            if not isinstance(article, ExternalArticle):
+                raise ValueError("Preprocessing requires an external article")
             logging.info(
                 "Received article session=%s name=%r",
-                message["session_id"], message["article"].data["name"],
+                message.session_id, article.name,
             )
-            message["article"] = self.preprocessor.process(message["article"])
+            processed_article = self.preprocessor.process(article)
+            message.article = processed_article
             logging.info(
                 "Processed article session=%s name=%r abstract_word_count=%d unique_words=%d",
-                message["session_id"], message["article"].name,
-                message["article"].abstract_word_count, len(message["article"].abstract),
+                message.session_id, processed_article.name,
+                processed_article.abstract_word_count, len(processed_article.abstract),
             )
-        elif message["type"] != MsgType.EOF_RECORDS:
+        elif not message.is_eof():
             raise ValueError("Expected ARTICLE_RECORD or EOF_RECORDS")
         self.output_queue.send(internal.serialize(message))
         logging.info(
             "Published %s to filters session=%s",
-            message["type"].name, message["session_id"],
+            message.type.name, message.session_id,
         )
         ack()
 
