@@ -78,7 +78,7 @@ def language_filter(index):
 """
 
 
-def coordinator(stage, exchange, routing_keys=(), bindings=None):
+def coordinator(stage, exchange, routing_keys=(), bindings=None, query_id=None):
     return f"""  coordinator_{stage}:
     build:
       context: .
@@ -90,6 +90,7 @@ def coordinator(stage, exchange, routing_keys=(), bindings=None):
       OUTPUT_EXCHANGE: {exchange}
       OUTPUT_ROUTING_KEYS: '{','.join(routing_keys)}'
       OUTPUT_BINDINGS: '{json.dumps(bindings or {})}'
+      QUERY_ID: '{query_id or ''}'
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -123,7 +124,7 @@ def generate_compose(clients, year_filters, language_filters):
     services.append(coordinator("year", "articles_by_year",
                                 ("article.pre2020", "article.post2020"),
                                 {"articles_pre2020": "article.pre2020", "articles_post2020": "article.post2020"}))
-    services.append(coordinator("language", "article_results"))
+    services.append(coordinator("language", "article_results", query_id=1))
     for index in range(1, year_filters + 1):
         services.append(year_filter(index))
     for index in range(1, language_filters + 1):

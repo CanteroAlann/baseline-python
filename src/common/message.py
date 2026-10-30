@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from common.article import CleanArticle, ExternalArticle
-from common.enums import MsgType
+from common.enums import MsgType, QUERY_IDS
 
 
 @dataclass
@@ -13,6 +13,8 @@ class Message:
     article_id: int | None = None
     expected_messages: int | None = None
     output: str | None = None
+    query_id: int | None = None
+    result: Any = None
 
     def is_article(self) -> bool:
         return self.type == MsgType.ARTICLE_RECORD
@@ -25,6 +27,17 @@ class Message:
 
     def is_done(self) -> bool:
         return self.type == MsgType.DONE
+
+    def is_query_result(self) -> bool:
+        return self.type == MsgType.QUERY_RESULT
+
+    def is_query_eof(self) -> bool:
+        return self.type == MsgType.QUERY_EOF
+
+    def require_query_id(self) -> int:
+        if type(self.query_id) is not int or self.query_id not in QUERY_IDS:
+            raise ValueError("query_id must be between 1 and 5")
+        return self.query_id
 
     def require_article(self) -> ExternalArticle | CleanArticle:
         if self.article is None:
@@ -41,4 +54,8 @@ class Message:
             data["expected_messages"] = self.expected_messages
         if self.is_done():
             data["output"] = self.output
+        if self.query_id is not None:
+            data["query_id"] = self.query_id
+        if self.is_query_result():
+            data["result"] = self.result
         return data

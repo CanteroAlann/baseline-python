@@ -38,6 +38,7 @@ services:
       OUTPUT_EXCHANGE: articles_by_year
       OUTPUT_ROUTING_KEYS: 'article.pre2020,article.post2020'
       OUTPUT_BINDINGS: '{"articles_pre2020": "article.pre2020", "articles_post2020": "article.post2020"}'
+      QUERY_ID: ''
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -52,6 +53,7 @@ services:
       OUTPUT_EXCHANGE: article_results
       OUTPUT_ROUTING_KEYS: ''
       OUTPUT_BINDINGS: '{}'
+      QUERY_ID: '1'
     depends_on:
       rabbitmq:
         condition: service_healthy

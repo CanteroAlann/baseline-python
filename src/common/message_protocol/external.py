@@ -1,8 +1,10 @@
 from common.enums import MsgType
 from common import custom_socket
 from common.article import ExternalArticle
+from common.message import Message
 
 from . import external_serializer as serializer
+from . import internal
 
 MAX_FIELD_SIZE = 64 * 1024 * 1024
 
@@ -46,6 +48,15 @@ def _recv_empty(sock):
     return None
 
 
+def _recv_query_message(sock):
+    return internal.deserialize(_recv_string(sock).encode("utf-8"))
+
+
+def _send_query_message(sock, message: Message):
+    custom_socket.send_all(sock, serializer.serialize_uint32(message.type)
+                           + _serialize_bytes(internal.serialize(message)))
+
+
 def _send_article_record(sock, article):
     message = serializer.serialize_uint32(MsgType.ARTICLE_RECORD)
     message += _serialize_bytes(article.serialize())
@@ -73,6 +84,8 @@ RECV_MSG_HANDLERS = {
     MsgType.ARTICLE_RESULTS: _recv_article_results,
     MsgType.ACK: _recv_empty,
     MsgType.EOF_RECORDS: _recv_empty,
+    MsgType.QUERY_RESULT: _recv_query_message,
+    MsgType.QUERY_EOF: _recv_query_message,
 }
 
 SEND_MSG_HANDLERS = {
@@ -80,6 +93,8 @@ SEND_MSG_HANDLERS = {
     MsgType.ARTICLE_RESULTS: _send_article_results,
     MsgType.ACK: _send_ack,
     MsgType.EOF_RECORDS: _send_eof_records,
+    MsgType.QUERY_RESULT: _send_query_message,
+    MsgType.QUERY_EOF: _send_query_message,
 }
 
 
@@ -87,10 +102,15 @@ def recv_msg(sock):
     msg_type = MsgType(_recv_uint32(sock))
     if msg_type not in RECV_MSG_HANDLERS:
         raise ValueError(f"Unknown message type: {msg_type}")
-    return msg_type, RECV_MSG_HANDLERS[msg_type](sock)
+    payload = RECV_MSG_HANDLERS[msg_type](sock)
+    if isinstance(payload, Message) and payload.type != msg_type:
+        raise ValueError("Query frame type does not match its payload")
+    return msg_type, payload
 
 
 def send_msg(sock, msg_type, *args):
     if msg_type not in SEND_MSG_HANDLERS:
         raise ValueError(f"Unknown message type: {msg_type}")
+    if args and isinstance(args[0], Message) and args[0].type != msg_type:
+        raise ValueError("Query frame type does not match its payload")
     SEND_MSG_HANDLERS[msg_type](sock, *args)

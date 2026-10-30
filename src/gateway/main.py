@@ -6,15 +6,14 @@ import sys
 
 from common import middleware
 from common.message_protocol import external as protocol
-from common.enums import ExitCode, MsgType
-from common.coordination import non_negative
+from common.enums import ExitCode, MsgType, QUERY_COUNT
 
 from .message_handler import MessageHandler
 from .client_socket import ClientSocket
 from .server import GatewayServer
 
 
-def handle_client_request(client_socket, output_queue, input_queue=None):
+def handle_client_request(client_socket, output_queue, input_queue=None, query_count=QUERY_COUNT):
     handler = MessageHandler()
     owns_queue = input_queue is None
     if owns_queue:
@@ -27,63 +26,47 @@ def handle_client_request(client_socket, output_queue, input_queue=None):
             "Bound private results queue=%s session=%s",
             input_queue.queue_name, handler.session_id,
         )
-        _handle_client_request(client_socket, output_queue, input_queue, handler)
+        _handle_client_request(client_socket, output_queue, input_queue, handler, query_count)
     finally:
         if owns_queue:
             input_queue.close()
 
 
-def _handle_client_request(client_socket, output_queue, input_queue, handler):
+def _handle_client_request(client_socket, output_queue, input_queue, handler, query_count):
     logging.info("Started client session=%s", handler.session_id)
     while True:
         msg_type, article = protocol.recv_msg(client_socket)
         if msg_type == MsgType.ARTICLE_RECORD:
             output_queue.send(handler.serialize_data_message(article))
-            logging.info(
-                "Published article to year filter session=%s name=%r",
-                handler.session_id, article.data["name"],
-            )
         elif msg_type == MsgType.EOF_RECORDS:
             output_queue.send(handler.serialize_eof_message())
-            logging.info("Published EOF to year filter session=%s", handler.session_id)
+            logging.info("Published input EOF session=%s", handler.session_id)
             break
         else:
             raise ValueError("Expected ARTICLE_RECORD or EOF_RECORDS")
 
-    results = []
-    expected = None
+    completed_queries = 0
 
     def consume_result(body, ack, nack):
-        nonlocal expected
+        nonlocal completed_queries
         message = handler.deserialize_result_message(body)
         if message is None:
             ack()
             return
-        if message.is_article():
-            article = message.require_article()
-            results.append((message.article_id, article.url, article.date_modified))
-        elif message.is_eof():
-            expected = non_negative(message.expected_messages, "expected_messages")
-        else:
-            raise ValueError("Unexpected result message")
-
-        if expected is not None and len(results) > expected:
-            raise ValueError("More results than expected")
-        if expected is not None and len(results) == expected:
-            # Keep the original input order when workers finish out of order.
-            ordered_results = [(url, date) for _, url, date in sorted(results)]
-            protocol.send_msg(client_socket, MsgType.ARTICLE_RESULTS, ordered_results)
-            logging.info(
-                "Sent %d article results to client session=%s",
-                len(results), handler.session_id,
-            )
-            msg_type, _ = protocol.recv_msg(client_socket)
-            if msg_type != MsgType.ACK:
-                raise ValueError("Expected result ACK")
-            logging.info("Client acknowledged results session=%s", handler.session_id)
-            ack()
-            input_queue.stop_consuming()
-            return
+        if not (message.is_query_result() or message.is_query_eof()):
+            raise ValueError("Expected QUERY_RESULT or QUERY_EOF")
+        query_id = message.require_query_id()
+        protocol.send_msg(client_socket, message.type, message)
+        logging.info("Forwarded %s query=%s session=%s", message.type.name, query_id, handler.session_id)
+        if message.is_query_eof():
+            completed_queries += 1
+            if completed_queries == query_count:
+                msg_type, _ = protocol.recv_msg(client_socket)
+                if msg_type != MsgType.ACK:
+                    raise ValueError("Expected final query results ACK")
+                ack()
+                input_queue.stop_consuming()
+                return
         ack()
 
     try:
