@@ -20,8 +20,8 @@ RABBITMQ = """  rabbitmq:
       start_period: 50s
 """
 
-def gateway(index):
-    return f"""  gateway_{index}:
+def gateway():
+    return """  gateway_1:
     build:
       context: .
       dockerfile: src/gateway/Dockerfile
@@ -105,12 +105,12 @@ def client(index, filter_names):
     environment:
       PYTHONUNBUFFERED: "1"
       INPUT_FILE: /data/file{index}.csv
-      SERVER_HOST: gateway_{index}
+      SERVER_HOST: gateway_1
       SERVER_PORT: "5000"
     volumes:
       - ./samples:/data:ro
     depends_on:
-      - gateway_{index}
+      - gateway_1
 {dependencies}
 """
 
@@ -119,8 +119,7 @@ def generate_compose(clients, year_filters, language_filters):
     services = ["services:\n", RABBITMQ]
     filter_names = [f"year-filter_{index}" for index in range(1, year_filters + 1)]
     filter_names += [f"language-filter_{index}" for index in range(1, language_filters + 1)]
-    for index in range(1, clients + 1):
-        services.append(gateway(index))
+    services.append(gateway())
     services.append(coordinator("year", "articles_by_year",
                                 ("article.pre2020", "article.post2020"),
                                 {"articles_pre2020": "article.pre2020", "articles_post2020": "article.post2020"}))
@@ -136,7 +135,7 @@ def generate_compose(clients, year_filters, language_filters):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--clients", type=int, default=2, help="client/gateway pairs (default: 2)")
+    parser.add_argument("--clients", type=int, default=2, help="clients sharing one gateway (default: 2)")
     parser.add_argument("--year-filters", type=int, default=1, help="year workers (default: 1)")
     parser.add_argument("--language-filters", type=int, default=1, help="language workers (default: 1)")
     args = parser.parse_args()
@@ -146,7 +145,7 @@ def main():
     contents = generate_compose(args.clients, args.year_filters, args.language_filters)
     output = PROJECT_ROOT / "docker-compose.yaml"
     output.write_text(contents, encoding="utf-8")
-    print(f"Generated {output}: {args.clients} client/gateway pairs, "
+    print(f"Generated {output}: {args.clients} clients, 1 gateway, "
           f"{args.year_filters} year filters, {args.language_filters} language filters.")
 
 

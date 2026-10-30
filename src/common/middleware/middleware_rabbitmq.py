@@ -84,6 +84,14 @@ class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
         except pika.exceptions.AMQPError as exc:
             raise MessageMiddlewareDisconnectedError(str(exc)) from exc
 
+    def process_events(self):
+        try:
+            self.connection.process_data_events(time_limit=0)
+        except pika.exceptions.AMQPConnectionError as exc:
+            raise MessageMiddlewareDisconnectedError(str(exc)) from exc
+        except pika.exceptions.AMQPError as exc:
+            raise MessageMiddlewareMessageError(str(exc)) from exc
+
     def close(self):
         try:
             if self.owns_connection and self.connection is not None:

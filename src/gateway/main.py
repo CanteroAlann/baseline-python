@@ -10,6 +10,8 @@ from common.enums import ExitCode, MsgType
 from common.coordination import non_negative
 
 from .message_handler import MessageHandler
+from .client_socket import ClientSocket
+from .server import GatewayServer
 
 
 def handle_client_request(client_socket, output_queue, input_queue=None):
@@ -92,33 +94,48 @@ def _handle_client_request(client_socket, output_queue, input_queue, handler):
 
 SERVER_HOST = os.environ["SERVER_HOST"]
 SERVER_PORT = int(os.environ["SERVER_PORT"])
-SOCKET_TIMEOUT = float(os.environ.get("SOCKET_TIMEOUT", "120"))
+SOCKET_TIMEOUT = 120
+CLIENT_CONNECTION_BACKLOG = 12
+MAX_CLIENTS = 4
+CHILD_SHUTDOWN_TIMEOUT = 5
 
 MOM_HOST = os.environ["MOM_HOST"]
 RESULT_EXCHANGE = os.environ["RESULT_EXCHANGE"]
 OUTPUT_QUEUE = os.environ["OUTPUT_QUEUE"]
 
+
+def handle_client_process(client_socket):
+    logging.basicConfig(level=logging.INFO, format="%(processName)s[%(process)d] %(levelname)s %(message)s")
+    signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(ExitCode.SUCCESS))
+    signal.signal(signal.SIGINT, lambda signum, frame: sys.exit(ExitCode.SUCCESS))
+    output_queue = None
+    with client_socket:
+        try:
+            output_queue = middleware.MessageMiddlewareQueueRabbitMQ(MOM_HOST, OUTPUT_QUEUE)
+            connection = ClientSocket(client_socket, output_queue.process_events, SOCKET_TIMEOUT)
+            handle_client_request(connection, output_queue)
+        except (OSError, EOFError, ValueError, SyntaxError, TypeError, KeyError,
+                middleware.MessageMiddlewareDisconnectedError,
+                middleware.MessageMiddlewareMessageError) as exc:
+            logging.warning("Client session ended: %s", exc)
+            sys.exit(ExitCode.ERROR)
+        finally:
+            if output_queue is not None:
+                output_queue.close()
+
+
 def main():
     logging.basicConfig(level=logging.INFO)
-    signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(ExitCode.SUCCESS))
-    output_queue = middleware.MessageMiddlewareQueueRabbitMQ(MOM_HOST, OUTPUT_QUEUE)
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
-            server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            server_socket.bind((SERVER_HOST, SERVER_PORT))
-            server_socket.listen(1)
-            logging.info("Listening on %s:%d", SERVER_HOST, SERVER_PORT)
-            while True:
-                client_socket, address = server_socket.accept()
-                with client_socket:
-                    client_socket.settimeout(SOCKET_TIMEOUT)
-                    logging.info("Client connected: %s", address)
-                    try:
-                        handle_client_request(client_socket, output_queue)
-                    except (OSError, EOFError, ValueError, SyntaxError, TypeError, KeyError) as exc:
-                        logging.warning("Client session ended: %s", exc)
-    finally:
-        output_queue.close()
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
+        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server_socket.bind((SERVER_HOST, SERVER_PORT))
+        server_socket.listen(CLIENT_CONNECTION_BACKLOG)
+        server = GatewayServer(server_socket, handle_client_process, max_clients=MAX_CLIENTS,
+                               shutdown_timeout=CHILD_SHUTDOWN_TIMEOUT)
+        signal.signal(signal.SIGTERM, server.stop)
+        signal.signal(signal.SIGINT, server.stop)
+        logging.info("Listening on %s:%d max_clients=%s", SERVER_HOST, SERVER_PORT, MAX_CLIENTS)
+        server.run()
 
 
 if __name__ == "__main__":
