@@ -1,4 +1,5 @@
 import argparse
+import json
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -7,6 +8,8 @@ RABBITMQ = """  rabbitmq:
     build:
       context: .
       dockerfile: src/rabbitmq/Dockerfile
+    ports:
+      - "127.0.0.1:15672:15672"
     environment:
       RABBITMQ_LOG_LEVELS: error
     healthcheck:
@@ -17,8 +20,8 @@ RABBITMQ = """  rabbitmq:
       start_period: 50s
 """
 
-def gateway(index):
-    return f"""  gateway_{index}:
+def gateway():
+    return """  gateway_1:
     build:
       context: .
       dockerfile: src/gateway/Dockerfile
@@ -44,6 +47,7 @@ def year_filter(index):
       PYTHONUNBUFFERED: "1"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: articles
+      COORDINATOR_QUEUE: coordinator.year
       OUTPUT_EXCHANGE: articles_by_year
       PRE2020_QUEUE: articles_pre2020
       POST2020_QUEUE: articles_post2020
@@ -65,9 +69,29 @@ def language_filter(index):
       PYTHONUNBUFFERED: "1"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: articles_pre2020
+      COORDINATOR_QUEUE: coordinator.language
       INPUT_EXCHANGE: articles_by_year
       INPUT_ROUTING_KEY: article.pre2020
       OUTPUT_EXCHANGE: article_results
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+"""
+
+
+def coordinator(stage, exchange, routing_keys=(), bindings=None, query_id=None):
+    return f"""  coordinator_{stage}:
+    build:
+      context: .
+      dockerfile: src/coordinator/Dockerfile
+    environment:
+      PYTHONUNBUFFERED: "1"
+      MOM_HOST: rabbitmq
+      INPUT_QUEUE: coordinator.{stage}
+      OUTPUT_EXCHANGE: {exchange}
+      OUTPUT_ROUTING_KEYS: '{','.join(routing_keys)}'
+      OUTPUT_BINDINGS: '{json.dumps(bindings or {})}'
+      QUERY_ID: '{query_id or ''}'
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -119,13 +143,13 @@ def client(index, filter_names):
     environment:
       PYTHONUNBUFFERED: "1"
       INPUT_FILE: /data/file{index}.csv
-      SERVER_HOST: gateway_{index}
+      SERVER_HOST: gateway_1
       SERVER_PORT: "5000"
     volumes:
       - ./samples:/data:ro
       - ./output:/output
     depends_on:
-      - gateway_{index}
+      - gateway_1
 {dependencies}
 """
 
@@ -135,8 +159,11 @@ def generate_compose(clients, year_filters, language_filters):
     filter_names = [f"year-filter_{index}" for index in range(1, year_filters + 1)]
     filter_names += [f"language-filter_{index}" for index in range(1, language_filters + 1)]
     filter_names += ["biography-filter_1", "image-fetcher_1"]
-    for index in range(1, clients + 1):
-        services.append(gateway(index))
+    services.append(gateway())
+    services.append(coordinator("year", "articles_by_year",
+                                ("article.pre2020", "article.post2020"),
+                                {"articles_pre2020": "article.pre2020", "articles_post2020": "article.post2020"}))
+    services.append(coordinator("language", "article_results", query_id=1))
     for index in range(1, year_filters + 1):
         services.append(year_filter(index))
     for index in range(1, language_filters + 1):
@@ -144,13 +171,13 @@ def generate_compose(clients, year_filters, language_filters):
     services.append(biography_filter(1))
     services.append(image_fetcher(1))
     for index in range(1, clients + 1):
-        services.append(client(index, filter_names))
+        services.append(client(index, filter_names + ["coordinator_year", "coordinator_language"]))
     return "".join(services)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--clients", type=int, default=2, help="client/gateway pairs (default: 2)")
+    parser.add_argument("--clients", type=int, default=2, help="clients sharing one gateway (default: 2)")
     parser.add_argument("--year-filters", type=int, default=1, help="year workers (default: 1)")
     parser.add_argument("--language-filters", type=int, default=1, help="language workers (default: 1)")
     args = parser.parse_args()
@@ -160,7 +187,7 @@ def main():
     contents = generate_compose(args.clients, args.year_filters, args.language_filters)
     output = PROJECT_ROOT / "docker-compose.yaml"
     output.write_text(contents, encoding="utf-8")
-    print(f"Generated {output}: {args.clients} client/gateway pairs, "
+    print(f"Generated {output}: {args.clients} clients, 1 gateway, "
           f"{args.year_filters} year filters, {args.language_filters} language filters.")
 
 

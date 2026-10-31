@@ -1,4 +1,4 @@
-from common.enums import MsgType
+from common.enums import MsgType, QUERY_COUNT
 from csv import DictReader, field_size_limit, writer
 import logging
 import socket
@@ -6,6 +6,7 @@ import sys
 import time
 
 from common.article import ExternalArticle
+from common.message import Message
 from common.message_protocol import external as protocol
 
 DEFAULT_TIMEOUT = 120
@@ -56,16 +57,36 @@ class Client:
         
         protocol.send_msg(self.server_socket, MsgType.EOF_RECORDS)
 
-    def recv_article_results(self):
-        logging.info("Receiving article results")
-        msg_type, results = protocol.recv_msg(self.server_socket)
-        
-        if msg_type != MsgType.ARTICLE_RESULTS:
-            raise ValueError("Expected ARTICLE_RESULTS message")
-        
-        out = sys.stdout
-        writer(out).writerows(results)
-        out.flush()
+    def recv_query_results(self, query_count=QUERY_COUNT):
+        results = {}
+        completed_queries = 0
+        while completed_queries < query_count:
+            _, message = protocol.recv_msg(self.server_socket)
+            if not isinstance(message, Message):
+                raise ValueError("Expected a query result or EOF")
+            query_id = message.require_query_id()
+            records = results.setdefault(query_id, [])
+            if message.is_query_result():
+                records.append(message)
+                logging.info("Received Query %s partial result: %s", query_id, message.result)
+            elif message.is_query_eof():
+                completed_queries += 1
+                logging.info("Query %s finished", query_id)
+            else:
+                raise ValueError("Expected QUERY_RESULT or QUERY_EOF")
 
         protocol.send_msg(self.server_socket, MsgType.ACK)
+        final_results = {}
+        for query_id, records in results.items():
+            records.sort(key=lambda record: record.article_id or 0)
+            final_results[query_id] = [record.result for record in records]
+            logging.info("Query %s final results (%d): %s", query_id,
+                         len(records), final_results[query_id])
+        return final_results
+
+    def recv_article_results(self):
+        queries = self.recv_query_results()
+        results = [(result["url"], result["date_modified"]) for result in queries[1]]
+        writer(sys.stdout).writerows(results)
+        sys.stdout.flush()
         return results
