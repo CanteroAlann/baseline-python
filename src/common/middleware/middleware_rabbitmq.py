@@ -57,7 +57,7 @@ class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
         except pika.exceptions.AMQPError as exc:
             raise MessageMiddlewareMessageError(str(exc)) from exc
 
-    def start_consuming(self, on_message_callback):
+    def start_consuming(self, on_message_callback, *, include_routing_key=False):
         def consume(channel, method, properties, body):
             def ack():
                 channel.basic_ack(delivery_tag=method.delivery_tag)
@@ -65,7 +65,10 @@ class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
             def nack():
                 channel.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
 
-            on_message_callback(body, ack, nack)
+            if include_routing_key:
+                on_message_callback(body, ack, nack, method.routing_key)
+            else:
+                on_message_callback(body, ack, nack)
 
         try:
             self.channel.basic_consume(

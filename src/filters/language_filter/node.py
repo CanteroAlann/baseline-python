@@ -10,8 +10,8 @@ def filter_by_language(article: ExternalArticle | CleanArticle) -> bool:
 
 
 class LanguageFilterNode(FilterNode):
-    def __init__(self, input_queue, output_queue, coordinator_queue):
-        super().__init__(input_queue, output_queue, filter_by_language, coordinator_queue)
+    def __init__(self, input_queue, output_queue, control_queue):
+        super().__init__(input_queue, output_queue, filter_by_language, control_queue)
 
     def publish_message(self, body: bytes, message: Message):
         article = message.require_article()

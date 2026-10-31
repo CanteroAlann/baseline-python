@@ -14,6 +14,7 @@ OUTPUT_EXCHANGE = os.environ["OUTPUT_EXCHANGE"]
 OUTPUT_ROUTING_KEYS = tuple(filter(None, os.environ.get("OUTPUT_ROUTING_KEYS", "").split(",")))
 OUTPUT_BINDINGS = json.loads(os.environ.get("OUTPUT_BINDINGS", "{}"))
 QUERY_ID = int(os.environ["QUERY_ID"]) if os.environ.get("QUERY_ID") else None
+INDEPENDENT_ROUTES = os.environ.get("INDEPENDENT_ROUTES", "false").lower() == "true"
 
 
 def main():
@@ -25,7 +26,8 @@ def main():
         try:
             for queue, route in OUTPUT_BINDINGS.items():
                 outgoing.bind_queue(queue, route)
-            CoordinatorNode(incoming, outgoing, OUTPUT_ROUTING_KEYS, query_id=QUERY_ID).start()
+            CoordinatorNode(incoming, outgoing, OUTPUT_ROUTING_KEYS, query_id=QUERY_ID,
+                            independent_routes=INDEPENDENT_ROUTES).start()
         finally:
             outgoing.close()
     finally:

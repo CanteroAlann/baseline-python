@@ -10,8 +10,8 @@ POST2020_ROUTING_KEY = os.environ["POST2020_ROUTING_KEY"]
 
 
 class YearFilterNode(FilterNode):
-    def __init__(self, input_queue, output_exchange, coordinator_queue):
-        super().__init__(input_queue, output_exchange, None, coordinator_queue)
+    def __init__(self, input_queue, output_exchange, control_queue):
+        super().__init__(input_queue, output_exchange, None, control_queue)
 
     def process_article(self, message: Message) -> str | None:
         article = message.require_article()
