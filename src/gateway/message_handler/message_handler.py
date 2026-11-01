@@ -26,6 +26,6 @@ class MessageHandler:
 
     def deserialize_result_message(self, body: bytes) -> Message | None:
         message = internal.deserialize(body)
-        if message.session_id != self.session_id:
+        if not (message.is_query_result() or message.is_query_eof()):
             return None
         return message

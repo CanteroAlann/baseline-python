@@ -3,15 +3,27 @@ import os
 import signal
 import socket
 import sys
+from dataclasses import dataclass
 import base64
 
 from common import middleware
+from common.coordination import non_negative
+from common.message import Message
 from common.message_protocol import external as protocol
 from common.enums import ExitCode, MsgType, QUERY_COUNT
 
 from .message_handler import MessageHandler
 from .client_socket import ClientSocket
 from .server import GatewayServer
+
+
+@dataclass
+class QueryState:
+    received_results: int = 0
+    expected_results: int | None = None
+
+    def is_complete(self):
+        return self.expected_results is not None and self.received_results == self.expected_results
 
 
 """
@@ -21,7 +33,6 @@ def _process_client_request(client_socket, output_queue, input_queue, handler):
     logging.info("Started client session=%s", handler.session_id)
     while True:
         msg_type, article = protocol.recv_msg(client_socket)
-        # logging.info(f"ASD msg_type={msg_type}")
         if msg_type == MsgType.ARTICLE_RECORD:
             output_queue.send(handler.serialize_data_message(article))
         elif msg_type == MsgType.EOF_RECORDS:
@@ -34,6 +45,7 @@ def _process_client_request(client_socket, output_queue, input_queue, handler):
         
 def handle_client_request(client_socket, output_queue, input_queue=None, query_count=QUERY_COUNT):
     completed_queries = 0
+    queries: dict[int, QueryState] = {}
 
     handler = MessageHandler()
     owns_queue = input_queue is None
@@ -47,12 +59,25 @@ def handle_client_request(client_socket, output_queue, input_queue=None, query_c
         if message is None:
             ack()
             return
-        if not (message.is_query_result() or message.is_query_eof()):
-            raise ValueError("Expected QUERY_RESULT or QUERY_EOF")
         query_id = message.require_query_id()
-        protocol.send_msg(client_socket, message.type, message)
-        logging.info("Forwarded %s query=%s session=%s", message.type.name, query_id, handler.session_id)
-        if message.is_query_eof():
+        state = queries.setdefault(query_id, QueryState())
+        if message.is_query_result():
+            state.received_results += 1
+        else:
+            state.expected_results = non_negative(message.expected_messages, "expected_messages")
+
+        if state.expected_results is not None and state.received_results > state.expected_results:
+            raise ValueError(f"Query {query_id} received more results than expected")
+
+        if message.is_query_result():
+            protocol.send_msg(client_socket, message.type, message)
+            logging.info("Forwarded QUERY_RESULT query=%s session=%s", query_id, handler.session_id)
+
+        if state.is_complete():
+            eof = Message(MsgType.QUERY_EOF, query_id=query_id, expected_messages=state.expected_results)
+            protocol.send_msg(client_socket, eof.type, eof)
+            logging.info("Forwarded QUERY_EOF query=%s session=%s results=%s",
+                         query_id, handler.session_id, state.received_results)
             completed_queries += 1
             if completed_queries == query_count:
                 msg_type, _ = protocol.recv_msg(client_socket)
@@ -79,7 +104,7 @@ def handle_client_request(client_socket, output_queue, input_queue=None, query_c
 
 SERVER_HOST = os.environ["SERVER_HOST"]
 SERVER_PORT = int(os.environ["SERVER_PORT"])
-SOCKET_TIMEOUT = 120
+SOCKET_TIMEOUT = 1800
 CLIENT_CONNECTION_BACKLOG = 12
 MAX_CLIENTS = 4
 CHILD_SHUTDOWN_TIMEOUT = 5

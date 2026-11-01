@@ -1,5 +1,5 @@
 from common.enums import MsgType, QUERY_COUNT
-from csv import DictReader, field_size_limit, writer
+from csv import DictReader, field_size_limit
 import logging
 from pathlib import Path
 import socket
@@ -13,7 +13,7 @@ from common.article import ExternalArticle
 from common.message import Message
 from common.message_protocol import external as protocol
 
-DEFAULT_TIMEOUT = 120
+DEFAULT_TIMEOUT = 1800
 CSV_ENCODING = "utf-8-sig"
 
 CLIENT_SLEEP_TIME = 0.2  # seconds
@@ -170,10 +170,3 @@ class Client:
             logging.info("Query %s final results (%d): %s", query_id,
                          len(records), final_results[query_id])
         return final_results
-
-    def recv_article_results(self):
-        queries = self.recv_query_results()
-        results = [(result["url"], result["date_modified"]) for result in queries[1]]
-        writer(sys.stdout).writerows(results)
-        sys.stdout.flush()
-        return results
