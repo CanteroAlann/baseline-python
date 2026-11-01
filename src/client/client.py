@@ -1,12 +1,13 @@
 from common.enums import MsgType, QUERY_COUNT
 from csv import DictReader, field_size_limit, writer
-import hashlib
 import logging
 from pathlib import Path
 import socket
 import sys
 import time
-from urllib.parse import urlparse
+import base64
+import json
+import re
 
 from common.article import ExternalArticle
 from common.message import Message
@@ -17,8 +18,86 @@ CSV_ENCODING = "utf-8-sig"
 
 CLIENT_SLEEP_TIME = 0.2  # seconds
 
+OUTPUT_DIR = Path("/output")
+
+
+def _detect_image_extension(data: bytes) -> str:
+        if data.startswith(b"\xff\xd8\xff"):
+            return ".jpg"
+        if data.startswith(b"\x89PNG\r\n\x1a\n"):
+            return ".png"
+        if data[:6] in (b"GIF87a", b"GIF89a"):
+            return ".gif"
+        if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+            return ".webp"
+        if data.startswith(b"BM"):
+            return ".bmp"
+        stripped = data.lstrip()
+        if stripped.startswith(b"<"):
+            return ".svg"
+        return ".bin"
+
+def _safe_filename(name: str, fallback: str) -> str:
+    name = re.sub(r"[^\w\-.]+", "_", name or "").strip("_")
+    return name or fallback
+
+
+
+
+
+
+
+
 
 class Client:
+    def save_results(self, final_results, output_dir: Path = OUTPUT_DIR):
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        # resumen txt
+        txt_path = output_dir / "results.txt"
+        with txt_path.open("w", encoding="utf-8") as f:
+            for query_id in sorted(final_results.keys()):
+                items = final_results[query_id]
+                f.write(f"=== Query {query_id} ({len(items)} resultados) ===\n")
+                for idx, item in enumerate(items):
+                    if isinstance(item, dict) and "image_bytes" in item:
+                        # no volcar el base64 gigante al txt
+                        summary = {k: v for k, v in item.items() if k != "image_bytes"}
+                        summary["image_bytes"] = (
+                            f"<guardada en images/{idx:04d}_*.EXT>"
+                            if item["image_bytes"] else None
+                        )
+                        f.write(json.dumps(summary, ensure_ascii=False) + "\n")
+                    else:
+                        f.write(json.dumps(item, ensure_ascii=False, default=str) + "\n")
+                f.write("\n")
+        logging.info("Saved %s", txt_path)
+
+        # imagenes
+        q2 = final_results.get(2, [])
+        if q2:
+            images_dir = output_dir / "images"
+            images_dir.mkdir(exist_ok=True)
+            for idx, item in enumerate(q2):
+                if not isinstance(item, dict):
+                    continue
+                b64 = item.get("image_bytes")
+                if not b64:
+                    continue
+                try:
+                    raw = base64.b64decode(b64)
+                except Exception as exc:
+                    logging.warning("No se pudo decodificar imagen idx=%s: %s", idx, exc)
+                    continue
+                ext = _detect_image_extension(raw)
+                stem = _safe_filename(item.get("name"), f"img_{idx}")
+                path = images_dir / f"{idx:04d}_{stem}{ext}"
+                path.write_bytes(raw)
+                logging.info("Saved image %s (%d bytes)", path, len(raw))
+
+
+
     def __init__(self, timeout=DEFAULT_TIMEOUT):
         self.server_socket = None
         self.timeout = timeout

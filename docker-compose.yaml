@@ -140,12 +140,33 @@ services:
       dockerfile: src/client/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
-      INPUT_FILE: /data/fileBioClean.csv
+      INPUT_FILE: /data/fileBio.csv
       SERVER_HOST: gateway_1
       SERVER_PORT: "5000"
     volumes:
       - ./samples:/data:ro
-      - ./output:/output
+      - ./output/client_1:/output
+    depends_on:
+      - gateway_1
+      - year-filter_1
+      - language-filter_1
+      - biography-filter_1
+      - image-fetcher_1
+      - coordinator_year
+      - coordinator_language
+      - coordinator_biography
+  client_2:
+    build:
+      context: .
+      dockerfile: src/client/Dockerfile
+    environment:
+      PYTHONUNBUFFERED: "1"
+      INPUT_FILE: /data/file2.csv
+      SERVER_HOST: gateway_1
+      SERVER_PORT: "5000"
+    volumes:
+      - ./samples:/data:ro
+      - ./output/client_2:/output
     depends_on:
       - gateway_1
       - year-filter_1

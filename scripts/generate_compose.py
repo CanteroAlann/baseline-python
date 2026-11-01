@@ -148,7 +148,7 @@ def client(index, filter_names):
       SERVER_PORT: "5000"
     volumes:
       - ./samples:/data:ro
-      - ./output:/output
+      - ./output/client_{index}:/output
     depends_on:
       - gateway_1
 {dependencies}
