@@ -32,12 +32,12 @@ class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
             self.host, queue_name, self.connection, exclusive=exclusive,
         )
 
-    def create_exchange(self, exchange_name):
-        return MessageMiddlewareExchangeRabbitMQ(self.connection, exchange_name)
+    def create_exchange(self, exchange_name, *, exchange_type="topic"):
+        return MessageMiddlewareExchangeRabbitMQ(self.connection, exchange_name, exchange_type=exchange_type)
 
-    def bind_exchange(self, exchange_name, routing_key):
+    def bind_exchange(self, exchange_name, routing_key, *, exchange_type="topic"):
         try:
-            self.channel.exchange_declare(exchange=exchange_name, exchange_type="topic")
+            self.channel.exchange_declare(exchange=exchange_name, exchange_type=exchange_type)
             self.channel.queue_bind(
                 queue=self.queue_name, exchange=exchange_name, routing_key=routing_key,
             )
@@ -57,7 +57,7 @@ class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
         except pika.exceptions.AMQPError as exc:
             raise MessageMiddlewareMessageError(str(exc)) from exc
 
-    def start_consuming(self, on_message_callback):
+    def start_consuming(self, on_message_callback, *, include_routing_key=False):
         def consume(channel, method, properties, body):
             def ack():
                 channel.basic_ack(delivery_tag=method.delivery_tag)
@@ -65,7 +65,10 @@ class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
             def nack():
                 channel.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
 
-            on_message_callback(body, ack, nack)
+            if include_routing_key:
+                on_message_callback(body, ack, nack, method.routing_key)
+            else:
+                on_message_callback(body, ack, nack)
 
         try:
             self.channel.basic_consume(
@@ -106,13 +109,13 @@ class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
 
 
 class MessageMiddlewareExchangeRabbitMQ:
-    def __init__(self, connection, exchange_name):
+    def __init__(self, connection, exchange_name, *, exchange_type="topic"):
         self.connection = connection
         self.exchange_name = exchange_name
         self.channel = None
         try:
             self.channel = connection.channel()
-            self.channel.exchange_declare(exchange=exchange_name, exchange_type="topic")
+            self.channel.exchange_declare(exchange=exchange_name, exchange_type=exchange_type)
             self.channel.confirm_delivery()
         except pika.exceptions.AMQPError as exc:
             self.close()

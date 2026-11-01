@@ -1,6 +1,7 @@
 import base64
 import logging
 import os
+from concurrent.futures import ThreadPoolExecutor, wait
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener
@@ -24,12 +25,23 @@ class WikimediaRedirectHandler(HTTPRedirectHandler):
 
 
 class ImageFetcherNode:
-    def __init__(self, input_queue, output_exchange):
+    def __init__(self, input_queue, output_exchange, control_queue):
         self.input_queue = input_queue
         self.output_exchange = output_exchange
+        self.control_queue = control_queue
         self.opener = build_opener(WikimediaRedirectHandler())
 
     def fetch_image(self, image_url):
+        # Only HTTP runs in the thread. Pika stays on the consuming thread.
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            download = executor.submit(self.download_image, image_url)
+            while True:
+                finished, _ = wait((download,), timeout=1)
+                self.input_queue.process_events()
+                if finished:
+                    return download.result()
+
+    def download_image(self, image_url):
         parsed = urlparse(image_url)
         if parsed.scheme != "https" or parsed.hostname != ALLOWED_IMAGE_HOST:
             raise ValueError("Image URL must use HTTPS on upload.wikimedia.org")
@@ -49,7 +61,6 @@ class ImageFetcherNode:
 
         return Message(
             MsgType.QUERY_RESULT,
-            message.session_id,
             article_id=message.article_id,
             query_id=2,
             result={
@@ -62,7 +73,6 @@ class ImageFetcherNode:
             },
         )
 
-
     def publish_result(self, message: Message, image_bytes):
         result = self.build_result(message, image_bytes)
         self.output_exchange.send(
@@ -73,6 +83,8 @@ class ImageFetcherNode:
 
     def process_article(self, message: Message):
         article = message.require_article()
+        if not isinstance(article, ExternalArticle):
+            raise ValueError("Image fetching requires an ExternalArticle")
         image_url = article.image_url
         image_bytes = None
 
@@ -91,34 +103,18 @@ class ImageFetcherNode:
         message = internal.deserialize(body, ExternalArticle)
 
         if message.is_eof():
-            result = Message(
-                MsgType.QUERY_EOF,
-                message.session_id,
-                query_id=2,
-            )
-            self.output_exchange.send(
-                internal.serialize(result),
-                routing_key=message.session_id,
-                mandatory=False,
-            )
-            ack()
-            return
-
-        if not message.is_article():
-            nack()
+            control = Message(MsgType.INPUT_EOF, message.session_id,
+                              expected_messages=message.expected_messages)
+        elif message.is_article():
+            logging.info("ImageFetcherNode received article session=%s article_id=%s",
+                         message.session_id, message.article_id)
+            self.process_article(message)
+            control = Message(MsgType.DONE, message.session_id, output="output")
+        else:
             raise ValueError("Expected ARTICLE_RECORD or EOF_RECORDS")
 
-        article = message.require_article()
-        logging.info("AAA Received message session=%s name=%r article_id=%s image_url=%r", message.session_id, article.name, message.article_id, article.image_url)
-            
-        try:
-            self.process_article(message)
-        except Exception:
-            nack()
-            raise
-
+        self.control_queue.send(internal.serialize(control))
         ack()
 
     def start(self):
         self.input_queue.start_consuming(self.process_message)
-        

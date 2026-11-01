@@ -7,11 +7,11 @@ from common.message_protocol import internal
 
 
 class FilterNode:
-    def __init__(self, input_queue, output_queue, filter_function, coordinator_queue):
+    def __init__(self, input_queue, output_queue, filter_function, control_queue):
         self.input_queue = input_queue
         self.output_queue = output_queue
         self.filter_function = filter_function
-        self.coordinator_queue = coordinator_queue
+        self.control_queue = control_queue
 
     def process_message(self, body, ack, nack):
         message = internal.deserialize(body, ExternalArticle)
@@ -28,7 +28,7 @@ class FilterNode:
             control = Message(MsgType.DONE, message.session_id, output=output)
         else:
             raise ValueError("Expected ARTICLE_RECORD or EOF_RECORDS")
-        self.coordinator_queue.send(internal.serialize(control))
+        self.control_queue.send(internal.serialize(control))
         logging.info(
             "%s sent %s to coordinator session=%s article_id=%s expected_messages=%s",
             type(self).__name__, control.type.name, message.session_id,

@@ -1,5 +1,5 @@
 from common.enums import MsgType, QUERY_COUNT
-from csv import DictReader, field_size_limit, writer
+from csv import DictReader, field_size_limit
 import logging
 from pathlib import Path
 import socket
@@ -13,7 +13,7 @@ from common.article import ExternalArticle
 from common.message import Message
 from common.message_protocol import external as protocol
 
-DEFAULT_TIMEOUT = 120
+DEFAULT_TIMEOUT = 1800
 CSV_ENCODING = "utf-8-sig"
 
 CLIENT_SLEEP_TIME = 0.2  # seconds
@@ -42,11 +42,10 @@ def _safe_filename(name: str, fallback: str) -> str:
     return name or fallback
 
 
-
-
-
-
-
+def _result_for_log(result):
+    if isinstance(result, dict) and result.get("image_bytes"):
+        return {**result, "image_bytes": f"<{len(result['image_bytes'])} base64 characters>"}
+    return result
 
 
 class Client:
@@ -155,7 +154,7 @@ class Client:
             records = results.setdefault(query_id, [])
             if message.is_query_result():
                 records.append(message)
-                logging.info("Received Query %s partial result: %s", query_id, message.result)
+                logging.info("Received Query %s partial result: %s", query_id, _result_for_log(message.result))
             elif message.is_query_eof():
                 completed_queries += 1
                 logging.info("Query %s finished", query_id)
@@ -168,12 +167,5 @@ class Client:
             records.sort(key=lambda record: record.article_id or 0)
             final_results[query_id] = [record.result for record in records]
             logging.info("Query %s final results (%d): %s", query_id,
-                         len(records), final_results[query_id])
+                         len(records), [_result_for_log(value) for value in final_results[query_id]])
         return final_results
-
-    def recv_article_results(self):
-        queries = self.recv_query_results()
-        results = [(result["url"], result["date_modified"]) for result in queries[1]]
-        writer(sys.stdout).writerows(results)
-        sys.stdout.flush()
-        return results
