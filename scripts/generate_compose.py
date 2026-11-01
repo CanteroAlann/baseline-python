@@ -107,6 +107,7 @@ def biography_filter(index):
       PYTHONUNBUFFERED: "1"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: articles_biography
+      COORDINATOR_QUEUE: coordinator.biography
       OUTPUT_QUEUE: q2_image_requests
       INPUT_EXCHANGE: articles_by_year
       INPUT_ROUTING_KEY: article.pre2020
@@ -162,8 +163,10 @@ def generate_compose(clients, year_filters, language_filters):
     services.append(gateway())
     services.append(coordinator("year", "articles_by_year",
                                 ("article.pre2020", "article.post2020"),
-                                {"articles_pre2020": "article.pre2020", "articles_post2020": "article.post2020"}))
+                                {"articles_pre2020": "article.pre2020", "articles_post2020": "article.post2020", "articles_biography": "article.pre2020"}))
     services.append(coordinator("language", "article_results", query_id=1))
+    services.append(coordinator("biography", "q2_image_requests_exchange",
+                                ("q2.images",), {"q2_image_requests": "q2.images"}))
     for index in range(1, year_filters + 1):
         services.append(year_filter(index))
     for index in range(1, language_filters + 1):
@@ -171,7 +174,9 @@ def generate_compose(clients, year_filters, language_filters):
     services.append(biography_filter(1))
     services.append(image_fetcher(1))
     for index in range(1, clients + 1):
-        services.append(client(index, filter_names + ["coordinator_year", "coordinator_language"]))
+      services.append(client(index, filter_names + [
+        "coordinator_year", "coordinator_language", "coordinator_biography",
+      ]))
     return "".join(services)
 
 
@@ -188,7 +193,7 @@ def main():
     output = PROJECT_ROOT / "docker-compose.yaml"
     output.write_text(contents, encoding="utf-8")
     print(f"Generated {output}: {args.clients} clients, 1 gateway, "
-          f"{args.year_filters} year filters, {args.language_filters} language filters.")
+          f"{args.year_filters} year filters, {args.language_filters} language filters, 1 biography filter, 1 image fetcher")
 
 
 if __name__ == "__main__":

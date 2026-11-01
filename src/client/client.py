@@ -1,9 +1,12 @@
 from common.enums import MsgType, QUERY_COUNT
 from csv import DictReader, field_size_limit, writer
+import hashlib
 import logging
+from pathlib import Path
 import socket
 import sys
 import time
+from urllib.parse import urlparse
 
 from common.article import ExternalArticle
 from common.message import Message
@@ -45,15 +48,20 @@ class Client:
         
         with open(file_path, newline="", encoding=CSV_ENCODING) as source:
             reader = DictReader(source, strict=True)
-            
+
             if not reader.fieldnames:
                 raise ValueError(f"{file_path}: missing field names in CSV header")
             
+            count=0
             for article in reader:
                 if None in article or any(value is None for value in article.values()):
                     raise ValueError(f"{file_path}: malformed CSV record")
+
+                # logging.info("Sending article record: %s", article)
+                count+=1
                 
                 protocol.send_msg(self.server_socket, MsgType.ARTICLE_RECORD, ExternalArticle(article))
+            logging.info("Amount of records sent: %d", count)
         
         protocol.send_msg(self.server_socket, MsgType.EOF_RECORDS)
 

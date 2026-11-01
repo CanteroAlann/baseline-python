@@ -37,6 +37,7 @@ class GatewayServer:
                 try:
                     if not self.running:
                         break
+                    # crea un nuevo proceso para manejar la conexión del cliente
                     process = self.context.Process(
                         target=self.client_handler, args=(client_socket,),
                     )
