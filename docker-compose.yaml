@@ -57,6 +57,21 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
+  coordinator_biography:
+    build:
+      context: .
+      dockerfile: src/coordinator/Dockerfile
+    environment:
+      PYTHONUNBUFFERED: "1"
+      MOM_HOST: rabbitmq
+      INPUT_QUEUE: coordinator.biography
+      OUTPUT_EXCHANGE: q2_image_requests_exchange
+      OUTPUT_ROUTING_KEYS: 'q2.images'
+      OUTPUT_BINDINGS: '{"q2_image_requests": "q2.images"}'
+      QUERY_ID: ''
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
   year-filter_1:
     build:
       context: .
@@ -102,21 +117,6 @@ services:
       OUTPUT_QUEUE: q2_image_requests
       INPUT_EXCHANGE: articles_by_year
       INPUT_ROUTING_KEY: article.pre2020
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-  coordinator_biography:
-    build:
-      context: .
-      dockerfile: src/coordinator/Dockerfile
-    environment:
-      PYTHONUNBUFFERED: "1"
-      MOM_HOST: rabbitmq
-      INPUT_QUEUE: coordinator.biography
-      OUTPUT_EXCHANGE: q2_image_requests_exchange
-      OUTPUT_ROUTING_KEYS: q2.images
-      OUTPUT_BINDINGS: '{"q2_image_requests": "q2.images"}'
-      QUERY_ID: ''
     depends_on:
       rabbitmq:
         condition: service_healthy

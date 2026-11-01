@@ -14,10 +14,14 @@ def _recv_uint32(sock):
 
 
 def _recv_string(sock):
+    return serializer.deserialize_string(_recv_bytes(sock))
+
+
+def _recv_bytes(sock):
     size = _recv_uint32(sock)
     if size > MAX_FIELD_SIZE:
         raise ValueError("Field exceeds maximum size")
-    return serializer.deserialize_string(custom_socket.recv_all(sock, size))
+    return custom_socket.recv_all(sock, size)
 
 
 def _serialize_bytes(data):

@@ -18,4 +18,4 @@ class MsgType(IntEnum):
 
 
 QUERY_IDS = (1, 2, 3, 4, 5)
-QUERY_COUNT = 1  # Increase as the other queries are implemented.
+QUERY_COUNT = 2  # Increase as the other queries are implemented.
