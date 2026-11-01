@@ -19,12 +19,13 @@ class CoordinatorState:
     def set_expected_count(self, expected: int | None) -> None:
         self.expected = non_negative(expected, "expected_messages")
 
-    def record_done(self, output: str | None) -> None:
+    def record_done(self, output: str | None, produced_count: int = 1) -> None:
+        produced_count = non_negative(produced_count, "produced_count")
         if output is not None and output not in self.outputs:
             raise ValueError("Unknown article output")
         self.processed += 1
         if output is not None:
-            self.outputs[output] += 1
+            self.outputs[output] += produced_count
 
     def is_complete(self) -> bool:
         if self.expected is None:
@@ -37,10 +38,11 @@ class CoordinatorState:
 class Coordinator:
     """Count DONE controls per session. emit waits for publisher confirms."""
 
-    def __init__(self, emit, routing_keys=(), *, independent_routes=False):
+    def __init__(self, emit, routing_keys=(), *, independent_routes=False, expected_inputs=None):
         self.emit = emit
         self.routing_keys = tuple(routing_keys)
         self.independent_routes = independent_routes
+        self.expected_inputs = non_negative(expected_inputs, "expected_inputs") if expected_inputs is not None else None
         self.sessions: dict[str | tuple[str, str], CoordinatorState] = {}
 
     def handle(self, message: Message):
@@ -60,11 +62,12 @@ class Coordinator:
             outputs = self.routing_keys or ("output",)
         state = self.sessions.setdefault(session_key, CoordinatorState(
             outputs=dict.fromkeys(outputs, 0),
+            expected=self.expected_inputs,
         ))
         if message.is_input_eof():
             state.set_expected_count(message.expected_messages)
         else:
-            state.record_done(message.output)
+            state.record_done(message.output, message.produced_count if message.produced_count is not None else 1)
 
         if not state.is_complete():
             return

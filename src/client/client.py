@@ -9,7 +9,7 @@ from common.article import ExternalArticle
 from common.message import Message
 from common.message_protocol import external as protocol
 
-DEFAULT_TIMEOUT = 120
+DEFAULT_TIMEOUT = 1800
 CSV_ENCODING = "utf-8-sig"
 
 CLIENT_SLEEP_TIME = 0.2  # seconds

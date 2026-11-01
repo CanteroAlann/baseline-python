@@ -32,12 +32,12 @@ class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
             self.host, queue_name, self.connection, exclusive=exclusive,
         )
 
-    def create_exchange(self, exchange_name):
-        return MessageMiddlewareExchangeRabbitMQ(self.connection, exchange_name)
+    def create_exchange(self, exchange_name, *, exchange_type="topic"):
+        return MessageMiddlewareExchangeRabbitMQ(self.connection, exchange_name, exchange_type=exchange_type)
 
-    def bind_exchange(self, exchange_name, routing_key):
+    def bind_exchange(self, exchange_name, routing_key, *, exchange_type="topic"):
         try:
-            self.channel.exchange_declare(exchange=exchange_name, exchange_type="topic")
+            self.channel.exchange_declare(exchange=exchange_name, exchange_type=exchange_type)
             self.channel.queue_bind(
                 queue=self.queue_name, exchange=exchange_name, routing_key=routing_key,
             )
@@ -109,13 +109,13 @@ class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
 
 
 class MessageMiddlewareExchangeRabbitMQ:
-    def __init__(self, connection, exchange_name):
+    def __init__(self, connection, exchange_name, *, exchange_type="topic"):
         self.connection = connection
         self.exchange_name = exchange_name
         self.channel = None
         try:
             self.channel = connection.channel()
-            self.channel.exchange_declare(exchange=exchange_name, exchange_type="topic")
+            self.channel.exchange_declare(exchange=exchange_name, exchange_type=exchange_type)
             self.channel.confirm_delivery()
         except pika.exceptions.AMQPError as exc:
             self.close()

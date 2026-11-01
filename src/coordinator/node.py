@@ -5,15 +5,17 @@ from common.message_protocol import internal
 
 
 class CoordinatorNode:
-    def __init__(self, input_queue, output_queue, routing_keys=(), query_id=None, *, independent_routes=False):
+    def __init__(self, input_queue, output_queue, routing_keys=(), query_id=None, *, independent_routes=False,
+                 expected_inputs=None):
         self.input_queue = input_queue
         self.output_queue = output_queue
-        self.coordinator = Coordinator(self.publish_eof, routing_keys, independent_routes=independent_routes)
+        self.coordinator = Coordinator(self.publish_eof, routing_keys, independent_routes=independent_routes,
+                                       expected_inputs=expected_inputs)
         self.query_id = query_id
 
     def publish_eof(self, message: Message, routing_key: str):
         if self.query_id is not None:
-            message = Message(MsgType.QUERY_EOF, message.session_id, query_id=self.query_id,
+            message = Message(MsgType.QUERY_EOF, query_id=self.query_id,
                               expected_messages=message.expected_messages)
         body = internal.serialize(message)
         self.output_queue.send(body, routing_key=routing_key,

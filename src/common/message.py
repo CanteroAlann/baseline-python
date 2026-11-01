@@ -8,7 +8,7 @@ from common.enums import MsgType, QUERY_IDS
 @dataclass
 class Message:
     type: MsgType
-    session_id: str
+    session_id: str = ""
     article: ExternalArticle | CleanArticle | None = None
     article_id: int | None = None
     expected_messages: int | None = None
@@ -50,9 +50,6 @@ class Message:
     def is_avg_ready(self) -> bool:
         return self.type == MsgType.AVG_READY
 
-    def is_shard_done(self) -> bool:
-        return self.type == MsgType.SHARD_DONE
-
     def require_query_id(self) -> int:
         if type(self.query_id) is not int or self.query_id not in QUERY_IDS:
             raise ValueError("query_id must be between 1 and 5")
@@ -64,7 +61,9 @@ class Message:
         return self.article
 
     def to_dict(self) -> dict[str, Any]:
-        data: dict[str, Any] = {"type": self.type, "session_id": self.session_id}
+        data: dict[str, Any] = {"type": self.type}
+        if not (self.is_query_result() or self.is_query_eof()):
+            data["session_id"] = self.session_id
         if self.article is not None:
             data["article"] = self.article.to_dict()
         if self.article_id is not None:

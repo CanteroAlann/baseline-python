@@ -18,7 +18,6 @@ class MsgType(IntEnum):
     WORD_COUNT = 9
     HIST_PARTIAL = 10
     AVG_READY = 11
-    SHARD_DONE = 12
 
 
 QUERY_IDS = (1, 2, 3, 4, 5)
