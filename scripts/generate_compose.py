@@ -112,7 +112,7 @@ def biography_filter(index):
       PYTHONUNBUFFERED: "1"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: articles_biography
-      COORDINATOR_QUEUE: coordinator.biography
+      CONTROL_QUEUE: control.biography
       OUTPUT_QUEUE: q2_image_requests
       INPUT_EXCHANGE: articles_by_year
       INPUT_ROUTING_KEY: article.pre2020
@@ -131,6 +131,7 @@ def image_fetcher(index):
       PYTHONUNBUFFERED: "1"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: q2_image_requests
+      CONTROL_QUEUE: control.images
       OUTPUT_EXCHANGE: article_results
       IMAGE_FETCH_TIMEOUT: "15"
       IMAGE_MAX_BYTES: "20971520"
@@ -262,11 +263,13 @@ def q5_historical_reducer(historical_shards, candidate_shards):
 
 
 def generate_compose(clients, year_filters, language_filters, q5_word_workers=5,
-                     historical_shards=5, candidate_shards=5, preprocess_workers=5):
+                     historical_shards=5, candidate_shards=5, preprocess_workers=5, *,
+                     biography_filters=1, image_fetchers=1):
     services = ["services:\n", RABBITMQ]
     filter_names = [f"year-filter_{index}" for index in range(1, year_filters + 1)]
     filter_names += [f"language-filter_{index}" for index in range(1, language_filters + 1)]
-    filter_names += ["biography-filter_1", "image-fetcher_1"]
+    filter_names += [f"biography-filter_{index}" for index in range(1, biography_filters + 1)]
+    filter_names += [f"image-fetcher_{index}" for index in range(1, image_fetchers + 1)]
     services.append(gateway())
     services.append(coordinator("year", "articles_by_year",
                                 ("article.pre2020", "article.post2020"),
@@ -285,6 +288,7 @@ def generate_compose(clients, year_filters, language_filters, q5_word_workers=5,
         filter_names.append(f"coordinator_q5_{branch}_words")
     services.append(coordinator("biography", "q2_image_requests_exchange",
                                 ("q2.images",), {"q2_image_requests": "q2.images"}))
+    services.append(coordinator("images", "article_results", query_id=2))
     for index in range(1, year_filters + 1):
         services.append(year_filter(index))
     for index in range(1, language_filters + 1):
@@ -307,32 +311,38 @@ def generate_compose(clients, year_filters, language_filters, q5_word_workers=5,
     services.append(coordinator("q5_final", "article_results", query_id=5,
                                 expected_inputs=candidate_shards, input_queue="control.q5_done"))
     filter_names += ["q5-historical-reducer", "coordinator_q5_final"]
-    services.append(biography_filter(1))
-    services.append(image_fetcher(1))
+    for index in range(1, biography_filters + 1):
+        services.append(biography_filter(index))
+    for index in range(1, image_fetchers + 1):
+        services.append(image_fetcher(index))
     for index in range(1, clients + 1):
       services.append(client(index, filter_names + [
-        "coordinator_year", "coordinator_language", "coordinator_biography",
+        "coordinator_year", "coordinator_language", "coordinator_biography", "coordinator_images",
       ]))
     return "".join(services)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--clients", type=int, default=1, help="clients sharing one gateway (default: 3)")
+    parser.add_argument("--clients", type=int, default=2, help="clients sharing one gateway (default: 2)")
     parser.add_argument("--year-filters", type=int, default=3, help="year workers (default: 3)")
     parser.add_argument("--language-filters", type=int, default=3, help="language workers (default: 3)")
+    parser.add_argument("--biography-filters", type=int, default=3, help="biography workers (default: 3)")
+    parser.add_argument("--image-fetchers", type=int, default=3, help="image download workers (default: 3)")
     parser.add_argument("--preprocess-workers", type=int, default=3, help="shared preprocessing workers for both year branches")
     parser.add_argument("--q5-word-workers", type=int, default=3, help="word-count workers per Q5 branch")
     parser.add_argument("--q5-historical-shards", type=int, default=3)
     parser.add_argument("--q5-candidate-shards", type=int, default=3)
     args = parser.parse_args()
     if args.clients < 0 or min(args.year_filters, args.language_filters, args.q5_word_workers,
-                               args.q5_historical_shards, args.q5_candidate_shards, args.preprocess_workers) < 1:
+                               args.q5_historical_shards, args.q5_candidate_shards, args.preprocess_workers,
+                               args.biography_filters, args.image_fetchers) < 1:
         parser.error("clients must be >= 0; worker and shard counts must be >= 1")
 
     contents = generate_compose(args.clients, args.year_filters, args.language_filters,
                                 args.q5_word_workers, args.q5_historical_shards, args.q5_candidate_shards,
-                                args.preprocess_workers)
+                                args.preprocess_workers, biography_filters=args.biography_filters,
+                                image_fetchers=args.image_fetchers)
     output = PROJECT_ROOT / "docker-compose.yaml"
     output.write_text(contents, encoding="utf-8")
     print(f"Generated {output}: {args.clients} clients, 1 gateway, "
@@ -340,7 +350,8 @@ def main():
           f"{args.q5_word_workers} Q5 word-count workers, "
           f"{args.q5_historical_shards} Q5 historical shards, "
           f"{args.q5_candidate_shards} Q5 candidate shards, "
-          f"{args.year_filters} year filters, {args.language_filters} language filters, 1 biography filter, 1 image fetcher")
+          f"{args.year_filters} year filters, {args.language_filters} language filters, "
+          f"{args.biography_filters} biography filters, {args.image_fetchers} image fetchers")
 
 
 if __name__ == "__main__":
