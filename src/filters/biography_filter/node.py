@@ -19,9 +19,10 @@ def filter_by_biography(article: ExternalArticle) -> bool:
 # TODO: hardcodeado, cambiar
 BIOGRAPHY_OUTPUT_KEY = "q2.images"
 
+
 class BiographyFilterNode(FilterNode):
-    def __init__(self, input_queue, output_queue, coordinator_queue):
-        super().__init__(input_queue, output_queue, filter_by_biography, coordinator_queue)
+    def __init__(self, input_queue, output_queue, control_queue):
+        super().__init__(input_queue, output_queue, filter_by_biography, control_queue)
 
     def publish_message(self, body: bytes, message: Message):
         article = message.require_article()
