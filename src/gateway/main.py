@@ -3,6 +3,7 @@ import os
 import signal
 import socket
 import sys
+import base64
 
 from common import middleware
 from common.message_protocol import external as protocol
@@ -13,29 +14,14 @@ from .client_socket import ClientSocket
 from .server import GatewayServer
 
 
-def handle_client_request(client_socket, output_queue, input_queue=None, query_count=QUERY_COUNT):
-    handler = MessageHandler()
-    owns_queue = input_queue is None
-    if owns_queue:
-        input_queue = output_queue.create_queue(
-            f"{RESULT_EXCHANGE}.{handler.session_id}", exclusive=True,
-        )
-    try:
-        input_queue.bind_exchange(RESULT_EXCHANGE, handler.session_id)
-        logging.info(
-            "Bound private results queue=%s session=%s",
-            input_queue.queue_name, handler.session_id,
-        )
-        _handle_client_request(client_socket, output_queue, input_queue, handler, query_count)
-    finally:
-        if owns_queue:
-            input_queue.close()
-
-
-def _handle_client_request(client_socket, output_queue, input_queue, handler, query_count):
+"""
+bloque de recepción de mensajes del cliente y publicación en la cola de salida
+"""
+def _process_client_request(client_socket, output_queue, input_queue, handler):
     logging.info("Started client session=%s", handler.session_id)
     while True:
         msg_type, article = protocol.recv_msg(client_socket)
+        # logging.info(f"ASD msg_type={msg_type}")
         if msg_type == MsgType.ARTICLE_RECORD:
             output_queue.send(handler.serialize_data_message(article))
         elif msg_type == MsgType.EOF_RECORDS:
@@ -45,8 +31,16 @@ def _handle_client_request(client_socket, output_queue, input_queue, handler, qu
         else:
             raise ValueError("Expected ARTICLE_RECORD or EOF_RECORDS")
 
+        
+def handle_client_request(client_socket, output_queue, input_queue=None, query_count=QUERY_COUNT):
     completed_queries = 0
 
+    handler = MessageHandler()
+    owns_queue = input_queue is None
+    if owns_queue:
+        input_queue = output_queue.create_queue(
+            f"{RESULT_EXCHANGE}.{handler.session_id}", exclusive=True,
+        )
     def consume_result(body, ack, nack):
         nonlocal completed_queries
         message = handler.deserialize_result_message(body)
@@ -70,9 +64,17 @@ def _handle_client_request(client_socket, output_queue, input_queue, handler, qu
         ack()
 
     try:
+        input_queue.bind_exchange(RESULT_EXCHANGE, handler.session_id)
+        logging.info(
+            "Bound private results queue=%s session=%s",
+            input_queue.queue_name, handler.session_id,
+        )
+        _process_client_request(client_socket, output_queue, input_queue, handler)
         input_queue.start_consuming(consume_result)
     finally:
         input_queue.stop_consuming()
+        if owns_queue:
+            input_queue.close()
 
 
 SERVER_HOST = os.environ["SERVER_HOST"]

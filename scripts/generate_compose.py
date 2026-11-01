@@ -51,6 +51,7 @@ def year_filter(index):
       OUTPUT_EXCHANGE: articles_by_year
       PRE2020_QUEUE: articles_pre2020
       POST2020_QUEUE: articles_post2020
+      BIOGRAPHY_QUEUE: articles_biography
       PRE2020_ROUTING_KEY: article.pre2020
       POST2020_ROUTING_KEY: article.post2020
     depends_on:
@@ -97,6 +98,43 @@ def coordinator(stage, exchange, routing_keys=(), bindings=None, query_id=None):
 """
 
 
+def biography_filter(index):
+    return f"""  biography-filter_{index}:
+    build:
+      context: .
+      dockerfile: src/filters/biography_filter/Dockerfile
+    environment:
+      PYTHONUNBUFFERED: "1"
+      MOM_HOST: rabbitmq
+      INPUT_QUEUE: articles_biography
+      COORDINATOR_QUEUE: coordinator.biography
+      OUTPUT_QUEUE: q2_image_requests
+      INPUT_EXCHANGE: articles_by_year
+      INPUT_ROUTING_KEY: article.pre2020
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+"""
+
+
+def image_fetcher(index):
+    return f"""  image-fetcher_{index}:
+    build:
+      context: .
+      dockerfile: src/filters/image_fetcher/Dockerfile
+    environment:
+      PYTHONUNBUFFERED: "1"
+      MOM_HOST: rabbitmq
+      INPUT_QUEUE: q2_image_requests
+      OUTPUT_EXCHANGE: article_results
+      IMAGE_FETCH_TIMEOUT: "15"
+      IMAGE_MAX_BYTES: "20971520"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+"""
+
+
 def client(index, filter_names):
     dependencies = "\n".join(f"      - {name}" for name in filter_names)
     return f"""  client_{index}:
@@ -110,6 +148,7 @@ def client(index, filter_names):
       SERVER_PORT: "5000"
     volumes:
       - ./samples:/data:ro
+      - ./output/client_{index}:/output
     depends_on:
       - gateway_1
 {dependencies}
@@ -120,17 +159,24 @@ def generate_compose(clients, year_filters, language_filters):
     services = ["services:\n", RABBITMQ]
     filter_names = [f"year-filter_{index}" for index in range(1, year_filters + 1)]
     filter_names += [f"language-filter_{index}" for index in range(1, language_filters + 1)]
+    filter_names += ["biography-filter_1", "image-fetcher_1"]
     services.append(gateway())
     services.append(coordinator("year", "articles_by_year",
                                 ("article.pre2020", "article.post2020"),
-                                {"articles_pre2020": "article.pre2020", "articles_post2020": "article.post2020"}))
+                                {"articles_pre2020": "article.pre2020", "articles_post2020": "article.post2020", "articles_biography": "article.pre2020"}))
     services.append(coordinator("language", "article_results", query_id=1))
+    services.append(coordinator("biography", "q2_image_requests_exchange",
+                                ("q2.images",), {"q2_image_requests": "q2.images"}))
     for index in range(1, year_filters + 1):
         services.append(year_filter(index))
     for index in range(1, language_filters + 1):
         services.append(language_filter(index))
+    services.append(biography_filter(1))
+    services.append(image_fetcher(1))
     for index in range(1, clients + 1):
-        services.append(client(index, filter_names + ["coordinator_year", "coordinator_language"]))
+      services.append(client(index, filter_names + [
+        "coordinator_year", "coordinator_language", "coordinator_biography",
+      ]))
     return "".join(services)
 
 
@@ -147,7 +193,7 @@ def main():
     output = PROJECT_ROOT / "docker-compose.yaml"
     output.write_text(contents, encoding="utf-8")
     print(f"Generated {output}: {args.clients} clients, 1 gateway, "
-          f"{args.year_filters} year filters, {args.language_filters} language filters.")
+          f"{args.year_filters} year filters, {args.language_filters} language filters, 1 biography filter, 1 image fetcher")
 
 
 if __name__ == "__main__":

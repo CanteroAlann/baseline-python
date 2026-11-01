@@ -71,6 +71,20 @@ class ExternalArticle(Article):
     def in_language(self) -> str | None:
         return in_language_parse(parse_field(self.data.get("in_language")))
 
+    @property
+    def image_url(self) -> str | None:
+        """Extrae la URL de la imagen de forma limpia."""
+        image = parse_field(self.data.get("image"))
+        return image_object_to_url(image)
+
+    @property
+    def has_biography(self) -> bool:
+        """Determina si el artículo tiene la sección biography o biographie."""
+        sections = parse_field(self.data.get("sections"), [])
+        if not isinstance(sections, list):
+            return False
+        return has_biography_section(sections)
+
     def to_dict(self) -> dict[str, Any]:
         return self.data
 
