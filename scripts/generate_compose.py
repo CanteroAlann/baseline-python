@@ -47,10 +47,11 @@ def year_filter(index):
       PYTHONUNBUFFERED: "1"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: articles
-      COORDINATOR_QUEUE: coordinator.year
+      CONTROL_QUEUE: control.year
       OUTPUT_EXCHANGE: articles_by_year
       PRE2020_QUEUE: articles_pre2020
-      POST2020_QUEUE: articles_post2020
+      PREPROCESS_QUEUE: articles_to_preprocess
+      PREPROCESS_ROUTING_KEY: article.*
       PRE2020_ROUTING_KEY: article.pre2020
       POST2020_ROUTING_KEY: article.post2020
     depends_on:
@@ -68,7 +69,7 @@ def language_filter(index):
       PYTHONUNBUFFERED: "1"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: articles_pre2020
-      COORDINATOR_QUEUE: coordinator.language
+      CONTROL_QUEUE: control.language
       INPUT_EXCHANGE: articles_by_year
       INPUT_ROUTING_KEY: article.pre2020
       OUTPUT_EXCHANGE: article_results
@@ -78,7 +79,11 @@ def language_filter(index):
 """
 
 
-def coordinator(stage, exchange, routing_keys=(), bindings=None, query_id=None):
+def coordinator(stage, exchange, routing_keys=(), bindings=None, query_id=None, *, independent_routes=False,
+                expected_inputs=None, input_queue=None):
+    options = '      INDEPENDENT_ROUTES: "true"\n' if independent_routes else ""
+    if expected_inputs is not None:
+        options += f'      EXPECTED_INPUTS: "{expected_inputs}"\n'
     return f"""  coordinator_{stage}:
     build:
       context: .
@@ -86,12 +91,12 @@ def coordinator(stage, exchange, routing_keys=(), bindings=None, query_id=None):
     environment:
       PYTHONUNBUFFERED: "1"
       MOM_HOST: rabbitmq
-      INPUT_QUEUE: coordinator.{stage}
+      INPUT_QUEUE: {input_queue or f'control.{stage}'}
       OUTPUT_EXCHANGE: {exchange}
       OUTPUT_ROUTING_KEYS: '{','.join(routing_keys)}'
       OUTPUT_BINDINGS: '{json.dumps(bindings or {})}'
       QUERY_ID: '{query_id or ''}'
-    depends_on:
+{options}    depends_on:
       rabbitmq:
         condition: service_healthy
 """
@@ -116,19 +121,150 @@ def client(index, filter_names):
 """
 
 
-def generate_compose(clients, year_filters, language_filters):
+def preprocess(index):
+    return f"""  preprocess_{index}:
+    build:
+      context: .
+      dockerfile: src/preprocess/Dockerfile
+    environment:
+      PYTHONUNBUFFERED: "1"
+      MOM_HOST: rabbitmq
+      INPUT_QUEUE: articles_to_preprocess
+      INPUT_EXCHANGE: articles_by_year
+      INPUT_ROUTING_KEY: article.*
+      OUTPUT_EXCHANGE: preprocessed_articles
+      CONTROL_QUEUE: control.preprocess
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+"""
+
+
+def q5_word_count(index, branch, shard_count):
+    queue_name = "preprocessed_pre2020" if branch == "historical" else "preprocessed_post2020"
+    routing_key = "article.pre2020" if branch == "historical" else "article.post2020"
+    output_exchange = "q5.historical.counts" if branch == "historical" else "q5.candidate.counts"
+    return f"""  q5-{branch}-words_{index}:
+    build:
+      context: .
+      dockerfile: src/word_count/Dockerfile
+    environment:
+      PYTHONUNBUFFERED: "1"
+      MOM_HOST: rabbitmq
+      INPUT_QUEUE: {queue_name}
+      INPUT_EXCHANGE: preprocessed_articles
+      INPUT_ROUTING_KEY: {routing_key}
+      OUTPUT_EXCHANGE: {output_exchange}
+      CONTROL_QUEUE: control.q5_{branch}_words
+      BRANCH: {branch}
+      SHARD_COUNT: "{shard_count}"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+"""
+
+
+def q5_historical(shard_id):
+    return f"""  q5-historical_{shard_id + 1}:
+    build:
+      context: .
+      dockerfile: src/historical/Dockerfile
+    environment:
+      PYTHONUNBUFFERED: "1"
+      MOM_HOST: rabbitmq
+      INPUT_QUEUE: q5.historical.{shard_id}
+      INPUT_EXCHANGE: q5.historical.counts
+      INPUT_ROUTING_KEY: q5.historical.{shard_id}
+      OUTPUT_QUEUE: q5.historical.reducer
+      SHARD_ID: "{shard_id}"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+"""
+
+
+def q5_candidate(shard_id):
+    return f"""  q5-candidate_{shard_id + 1}:
+    build:
+      context: .
+      dockerfile: src/candidate/Dockerfile
+    environment:
+      PYTHONUNBUFFERED: "1"
+      MOM_HOST: rabbitmq
+      INPUT_QUEUE: q5.candidate.{shard_id}
+      INPUT_EXCHANGE: q5.candidate.counts
+      INPUT_ROUTING_KEY: q5.candidate.{shard_id}
+      AVERAGE_EXCHANGE: q5.average
+      RESULT_EXCHANGE: article_results
+      CONTROL_QUEUE: control.q5_done
+      SHARD_ID: "{shard_id}"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+"""
+
+
+def q5_historical_reducer(historical_shards, candidate_shards):
+    return f"""  q5-historical-reducer:
+    build:
+      context: .
+      dockerfile: src/historical_reducer/Dockerfile
+    environment:
+      PYTHONUNBUFFERED: "1"
+      MOM_HOST: rabbitmq
+      INPUT_QUEUE: q5.historical.reducer
+      OUTPUT_EXCHANGE: q5.average
+      HIST_SHARD_COUNT: "{historical_shards}"
+      CANDIDATE_SHARD_COUNT: "{candidate_shards}"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+"""
+
+
+def generate_compose(clients, year_filters, language_filters, q5_word_workers=5,
+                     historical_shards=5, candidate_shards=5, preprocess_workers=5):
     services = ["services:\n", RABBITMQ]
     filter_names = [f"year-filter_{index}" for index in range(1, year_filters + 1)]
     filter_names += [f"language-filter_{index}" for index in range(1, language_filters + 1)]
     services.append(gateway())
     services.append(coordinator("year", "articles_by_year",
                                 ("article.pre2020", "article.post2020"),
-                                {"articles_pre2020": "article.pre2020", "articles_post2020": "article.post2020"}))
+                                {"articles_pre2020": "article.pre2020", "articles_to_preprocess": "article.*"}))
     services.append(coordinator("language", "article_results", query_id=1))
+    services.append(coordinator("preprocess", "preprocessed_articles",
+                                ("article.pre2020", "article.post2020"),
+                                {"preprocessed_pre2020": "article.pre2020",
+                                 "preprocessed_post2020": "article.post2020"}, independent_routes=True))
+    filter_names.append("coordinator_preprocess")
+    for branch, count in [("historical", historical_shards), ("candidate", candidate_shards)]:
+        routes = tuple(f"q5.{branch}.{shard_id}" for shard_id in range(count))
+        output_exchange = "q5.historical.counts" if branch == "historical" else "q5.candidate.counts"
+        services.append(coordinator(f"q5_{branch}_words", output_exchange, routes,
+                                    {route: route for route in routes}))
+        filter_names.append(f"coordinator_q5_{branch}_words")
     for index in range(1, year_filters + 1):
         services.append(year_filter(index))
     for index in range(1, language_filters + 1):
         services.append(language_filter(index))
+    for index in range(1, preprocess_workers + 1):
+        services.append(preprocess(index))
+        filter_names.append(f"preprocess_{index}")
+    for branch, count in [("historical", historical_shards), ("candidate", candidate_shards)]:
+        for index in range(1, q5_word_workers + 1):
+            name = f"q5-{branch}-words_{index}"
+            services.append(q5_word_count(index, branch, count))
+            filter_names.append(name)
+    for shard_id in range(historical_shards):
+        services.append(q5_historical(shard_id))
+        filter_names.append(f"q5-historical_{shard_id + 1}")
+    for shard_id in range(candidate_shards):
+        services.append(q5_candidate(shard_id))
+        filter_names.append(f"q5-candidate_{shard_id + 1}")
+    services.append(q5_historical_reducer(historical_shards, candidate_shards))
+    services.append(coordinator("q5_final", "article_results", query_id=5,
+                                expected_inputs=candidate_shards, input_queue="control.q5_done"))
+    filter_names += ["q5-historical-reducer", "coordinator_q5_final"]
     for index in range(1, clients + 1):
         services.append(client(index, filter_names + ["coordinator_year", "coordinator_language"]))
     return "".join(services)
@@ -136,17 +272,28 @@ def generate_compose(clients, year_filters, language_filters):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--clients", type=int, default=2, help="clients sharing one gateway (default: 2)")
-    parser.add_argument("--year-filters", type=int, default=1, help="year workers (default: 1)")
-    parser.add_argument("--language-filters", type=int, default=1, help="language workers (default: 1)")
+    parser.add_argument("--clients", type=int, default=1, help="clients sharing one gateway (default: 3)")
+    parser.add_argument("--year-filters", type=int, default=3, help="year workers (default: 3)")
+    parser.add_argument("--language-filters", type=int, default=3, help="language workers (default: 3)")
+    parser.add_argument("--preprocess-workers", type=int, default=3, help="shared preprocessing workers for both year branches")
+    parser.add_argument("--q5-word-workers", type=int, default=3, help="word-count workers per Q5 branch")
+    parser.add_argument("--q5-historical-shards", type=int, default=3)
+    parser.add_argument("--q5-candidate-shards", type=int, default=3)
     args = parser.parse_args()
-    if args.clients < 0 or args.year_filters < 1 or args.language_filters < 1:
-        parser.error("clients must be >= 0; year and language filters must be >= 1")
+    if args.clients < 0 or min(args.year_filters, args.language_filters, args.q5_word_workers,
+                               args.q5_historical_shards, args.q5_candidate_shards, args.preprocess_workers) < 1:
+        parser.error("clients must be >= 0; worker and shard counts must be >= 1")
 
-    contents = generate_compose(args.clients, args.year_filters, args.language_filters)
+    contents = generate_compose(args.clients, args.year_filters, args.language_filters,
+                                args.q5_word_workers, args.q5_historical_shards, args.q5_candidate_shards,
+                                args.preprocess_workers)
     output = PROJECT_ROOT / "docker-compose.yaml"
     output.write_text(contents, encoding="utf-8")
     print(f"Generated {output}: {args.clients} clients, 1 gateway, "
+          f"{args.preprocess_workers} preprocessing workers, "
+          f"{args.q5_word_workers} Q5 word-count workers, "
+          f"{args.q5_historical_shards} Q5 historical shards, "
+          f"{args.q5_candidate_shards} Q5 candidate shards, "
           f"{args.year_filters} year filters, {args.language_filters} language filters.")
 
 
