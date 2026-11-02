@@ -179,6 +179,26 @@ def preprocess(index):
         condition: service_healthy
 """
 
+def word_sharder(preprocess_workers):
+    return f"""  word-sharder:
+    build:
+      context: .
+      dockerfile: src/word_sharder/Dockerfile
+    environment:
+      PYTHONUNBUFFERED: "1"
+      MOM_HOST: rabbitmq
+      INPUT_QUEUE: word_sharder_queue
+      INPUT_EXCHANGE: preprocessed_articles
+      INPUT_ROUTING_KEY: article.*
+      CONTROL_QUEUE: control.word_sharder
+      OUTPUT_EXCHANGE: article_results
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+"""
+# article.* toma tanto lo del <=2020 como >2021
+
+
 
 def q5_word_count(index, branch, shard_count):
     queue_name = "preprocessed_pre2020" if branch == "historical" else "preprocessed_post2020"
