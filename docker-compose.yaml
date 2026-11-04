@@ -135,6 +135,7 @@ services:
       CONTROL_QUEUE: control.q4_sum
       OUTPUT_EXCHANGE: q4.words
       Q4_SHARD_COUNT: "4"
+      BATCH_SIZE: "5"
     depends_on:
       rabbitmq:
         condition: service_healthy
