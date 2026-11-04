@@ -132,23 +132,23 @@ services:
       INPUT_QUEUE: word_sharder_queue
       INPUT_EXCHANGE: preprocessed_articles
       INPUT_ROUTING_KEY: article.*
-      CONTROL_QUEUE: control.word_sharder
+      CONTROL_QUEUE: control.q4_sum
       OUTPUT_EXCHANGE: q4.words
-      Q4_SHARD_COUNT: "2"
+      Q4_SHARD_COUNT: "4"
     depends_on:
       rabbitmq:
         condition: service_healthy
-  coordinator_word_sharder:
+  coordinator_q4_sum:
     build:
       context: .
       dockerfile: src/coordinator/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
       MOM_HOST: rabbitmq
-      INPUT_QUEUE: control.word_sharder
+      INPUT_QUEUE: control.q4_sum
       OUTPUT_EXCHANGE: q4.words
-      OUTPUT_ROUTING_KEYS: 'q4.sum.0,q4.sum.1'
-      OUTPUT_BINDINGS: '{"q4.sum.0": "q4.sum.0", "q4.sum.1": "q4.sum.1"}'
+      OUTPUT_ROUTING_KEYS: 'q4.sum.0,q4.sum.1,q4.sum.2,q4.sum.3'
+      OUTPUT_BINDINGS: '{"q4.sum.0": "q4.sum.0", "q4.sum.1": "q4.sum.1", "q4.sum.2": "q4.sum.2", "q4.sum.3": "q4.sum.3"}'
       QUERY_ID: ''
       INDEPENDENT_ROUTES: "true"
     depends_on:
@@ -165,7 +165,7 @@ services:
       OUTPUT_EXCHANGE: q4.tops
       SHARD_ID: "0"
     depends_on:
-      coordinator_word_sharder:
+      coordinator_q4_sum:
         condition: service_started
       rabbitmq:
         condition: service_healthy
@@ -180,7 +180,37 @@ services:
       OUTPUT_EXCHANGE: q4.tops
       SHARD_ID: "1"
     depends_on:
-      coordinator_word_sharder:
+      coordinator_q4_sum:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+  q4-sum-2:
+    build:
+      context: .
+      dockerfile: src/q4_sum/Dockerfile
+    environment:
+      PYTHONUNBUFFERED: "1"
+      MOM_HOST: rabbitmq
+      INPUT_QUEUE: q4.sum.2
+      OUTPUT_EXCHANGE: q4.tops
+      SHARD_ID: "2"
+    depends_on:
+      coordinator_q4_sum:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+  q4-sum-3:
+    build:
+      context: .
+      dockerfile: src/q4_sum/Dockerfile
+    environment:
+      PYTHONUNBUFFERED: "1"
+      MOM_HOST: rabbitmq
+      INPUT_QUEUE: q4.sum.3
+      OUTPUT_EXCHANGE: q4.tops
+      SHARD_ID: "3"
+    depends_on:
+      coordinator_q4_sum:
         condition: service_started
       rabbitmq:
         condition: service_healthy
@@ -195,7 +225,7 @@ services:
       INPUT_EXCHANGE: q4.tops
       INPUT_ROUTING_KEY: q4.tops
       OUTPUT_EXCHANGE: article_results
-      SHARD_COUNT: "2"
+      SHARD_COUNT: "4"
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -219,8 +249,10 @@ services:
       - preprocess_1
       - q4-sum-0
       - q4-sum-1
+      - q4-sum-2
+      - q4-sum-3
       - word-sharder
-      - coordinator_word_sharder
+      - coordinator_q4_sum
       - q4-join
       - coordinator_year
       - coordinator_language

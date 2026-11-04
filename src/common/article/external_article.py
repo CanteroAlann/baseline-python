@@ -65,7 +65,12 @@ class ExternalArticle(Article):
     @property
     def date_modified_year(self) -> int | None:
         modified = self.data.get("date_modified") or None
-        return datetime.fromisoformat(modified).year if modified else None
+        if not modified:
+            return None
+        try:
+            return datetime.fromisoformat(modified).year
+        except Exception:
+            return None
 
     @property
     def in_language(self) -> str | None:

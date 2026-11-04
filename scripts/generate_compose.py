@@ -190,7 +190,7 @@ def word_sharder(q4_shards):
       INPUT_QUEUE: word_sharder_queue
       INPUT_EXCHANGE: preprocessed_articles
       INPUT_ROUTING_KEY: article.*
-      CONTROL_QUEUE: control.word_sharder
+      CONTROL_QUEUE: control.q4_sum
       OUTPUT_EXCHANGE: q4.words
       Q4_SHARD_COUNT: "{q4_shards}"
     depends_on:
@@ -212,7 +212,7 @@ def q4_sum(shard_id):
       OUTPUT_EXCHANGE: q4.tops
       SHARD_ID: "{shard_id}"
     depends_on:
-      coordinator_word_sharder:
+      coordinator_q4_sum:
         condition: service_started
       rabbitmq:
         condition: service_healthy
@@ -353,57 +353,57 @@ def generate_compose(clients, year_filters, language_filters, q5_word_workers=5,
     # Q4
     services.append(word_sharder(q4_shards))
     services.append(coordinator(
-        "word_sharder", 
-        "q4.words",
+      "q4_sum",
+      "q4.words",
       tuple(f"q4.sum.{shard_id}" for shard_id in range(q4_shards)),
       {f"q4.sum.{shard_id}": f"q4.sum.{shard_id}" for shard_id in range(q4_shards)},
-        input_queue="control.word_sharder",
+      input_queue="control.q4_sum",
       independent_routes=True,
     ))
-for shard_id in range(q4_shards):
+    for shard_id in range(q4_shards):
       services.append(q4_sum(shard_id))
       filter_names.append(f"q4-sum-{shard_id}")
     services.append(q4_join(q4_shards))
-    filter_names += ["word-sharder", "coordinator_word_sharder", "q4-join"]
+    filter_names += ["word-sharder", "coordinator_q4_sum", "q4-join"]
 
     # Q5
-    for branch, count in [("historical", historical_shards), ("candidate", candidate_shards)]:
-        for index in range(1, q5_word_workers + 1):
-            name = f"q5-{branch}-words_{index}"
-            services.append(q5_word_count(index, branch, count))
-            filter_names.append(name)
-    for shard_id in range(historical_shards):
-        services.append(q5_historical(shard_id))
-        filter_names.append(f"q5-historical_{shard_id + 1}")
-    for shard_id in range(candidate_shards):
-        services.append(q5_candidate(shard_id))
-        filter_names.append(f"q5-candidate_{shard_id + 1}")
-    services.append(q5_historical_reducer(historical_shards, candidate_shards))
-    services.append(coordinator("q5_final", "article_results", query_id=5,
-                                expected_inputs=candidate_shards, input_queue="control.q5_done"))
-    filter_names += ["q5-historical-reducer", "coordinator_q5_final"]
-    for branch, count in [("historical", historical_shards), ("candidate", candidate_shards)]:
-        routes = tuple(f"q5.{branch}.{shard_id}" for shard_id in range(count))
-        output_exchange = "q5.historical.counts" if branch == "historical" else "q5.candidate.counts"
-        services.append(coordinator(f"q5_{branch}_words", output_exchange, routes,
-                                    {route: route for route in routes}))
-        filter_names.append(f"coordinator_q5_{branch}_words")
+    # for branch, count in [("historical", historical_shards), ("candidate", candidate_shards)]:
+    #     for index in range(1, q5_word_workers + 1):
+    #         name = f"q5-{branch}-words_{index}"
+    #         services.append(q5_word_count(index, branch, count))
+    #         filter_names.append(name)
+    # for shard_id in range(historical_shards):
+    #     services.append(q5_historical(shard_id))
+    #     filter_names.append(f"q5-historical_{shard_id + 1}")
+    # for shard_id in range(candidate_shards):
+    #     services.append(q5_candidate(shard_id))
+    #     filter_names.append(f"q5-candidate_{shard_id + 1}")
+    # services.append(q5_historical_reducer(historical_shards, candidate_shards))
+    # services.append(coordinator("q5_final", "article_results", query_id=5,
+    #                             expected_inputs=candidate_shards, input_queue="control.q5_done"))
+    # filter_names += ["q5-historical-reducer", "coordinator_q5_final"]
+    # for branch, count in [("historical", historical_shards), ("candidate", candidate_shards)]:
+    #     routes = tuple(f"q5.{branch}.{shard_id}" for shard_id in range(count))
+    #     output_exchange = "q5.historical.counts" if branch == "historical" else "q5.candidate.counts"
+    #     services.append(coordinator(f"q5_{branch}_words", output_exchange, routes,
+    #                                 {route: route for route in routes}))
+    #     filter_names.append(f"coordinator_q5_{branch}_words")
 
-    # Q2
-    for index in range(1, biography_filters + 1):
-        services.append(biography_filter(index))
-    for index in range(1, image_fetchers + 1):
-        services.append(image_fetcher(index))
-    filter_names += [f"image-fetcher_{index}" for index in range(1, image_fetchers + 1)]
-    filter_names += [f"biography-filter_{index}" for index in range(1, biography_filters + 1)]
-    services.append(coordinator("biography", "q2_image_requests_exchange",
-                                ("q2.images",), {"q2_image_requests": "q2.images"}))
-    services.append(coordinator("images", "article_results", query_id=2))
+    # # Q2
+    # for index in range(1, biography_filters + 1):
+    #     services.append(biography_filter(index))
+    # for index in range(1, image_fetchers + 1):
+    #     services.append(image_fetcher(index))
+    # filter_names += [f"image-fetcher_{index}" for index in range(1, image_fetchers + 1)]
+    # filter_names += [f"biography-filter_{index}" for index in range(1, biography_filters + 1)]
+    # services.append(coordinator("biography", "q2_image_requests_exchange",
+    #                             ("q2.images",), {"q2_image_requests": "q2.images"}))
+    # services.append(coordinator("images", "article_results", query_id=2))
 
     # Clientes
     for index in range(1, clients + 1):
       services.append(client(index, filter_names + [
-        "coordinator_year", "coordinator_language", "coordinator_biography", "coordinator_images",
+        "coordinator_year", "coordinator_language", #"coordinator_biography", "coordinator_images",
       ]))
     return "".join(services)
 
@@ -429,13 +429,13 @@ def main():
     contents = generate_compose(args.clients, args.year_filters, args.language_filters,
                                 args.q5_word_workers, args.q5_historical_shards, args.q5_candidate_shards,
                                 args.preprocess_workers, q4_shards=args.q4_sums,
-biography_filters=args.biography_filters,
+                                biography_filters=args.biography_filters,
                                 image_fetchers=args.image_fetchers)
     output = PROJECT_ROOT / "docker-compose.yaml"
     output.write_text(contents, encoding="utf-8")
     print(f"Generated {output}: {args.clients} clients, 1 gateway, "
           f"{args.preprocess_workers} preprocessing workers, "
-f"{args.q4_sums} Q4 sum shards, "
+          f"{args.q4_sums} Q4 sum shards, "
           f"{args.q5_word_workers} Q5 word-count workers, "
           f"{args.q5_historical_shards} Q5 historical shards, "
           f"{args.q5_candidate_shards} Q5 candidate shards, "
