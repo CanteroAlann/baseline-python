@@ -179,6 +179,67 @@ def preprocess(index):
         condition: service_healthy
 """
 
+
+def q3_shared_words(shard_count):
+    return f"""  q3-shared-words:
+    build:
+      context: .
+      dockerfile: src/q3_shared_words/Dockerfile
+    environment:
+      PYTHONUNBUFFERED: "1"
+      MOM_HOST: rabbitmq
+      INPUT_QUEUE: q3.preprocessed
+      INPUT_EXCHANGE: preprocessed_articles
+      INPUT_ROUTING_KEY: article.*
+      OUTPUT_EXCHANGE: q3.words
+      SHARD_COUNT: "{shard_count}"
+      INPUT_ROUTE_COUNT: "2"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+"""
+
+
+def q3_shared_shard(shard_id):
+    return f"""  q3-shared-{shard_id}:
+    build:
+      context: .
+      dockerfile: src/q3_shared_words/Dockerfile
+    entrypoint: ["python", "-m", "q3_shared_words.shard_main"]
+    environment:
+      PYTHONUNBUFFERED: "1"
+      MOM_HOST: rabbitmq
+      INPUT_QUEUE: q3.shared.{shard_id}
+      INPUT_EXCHANGE: q3.words
+      INPUT_ROUTING_KEY: q3.shared.{shard_id}
+      OUTPUT_EXCHANGE: q3.tops
+      SHARD_ID: "{shard_id}"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+"""
+
+
+def q3_join(shard_count):
+    return f"""  q3-join:
+    build:
+      context: .
+      dockerfile: src/q3_shared_words/Dockerfile
+    entrypoint: ["python", "-m", "q3_shared_words.join_main"]
+    environment:
+      PYTHONUNBUFFERED: "1"
+      MOM_HOST: rabbitmq
+      INPUT_QUEUE: q3.join
+      INPUT_EXCHANGE: q3.tops
+      INPUT_ROUTING_KEY: q3.tops
+      OUTPUT_EXCHANGE: article_results
+      SHARD_COUNT: "{shard_count}"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+"""
+
+
 def word_sharder(q4_shards, batch_size=5):
     return f"""  word-sharder:
     build:
@@ -323,7 +384,8 @@ def q5_historical_reducer(historical_shards, candidate_shards):
 
 
 def generate_compose(clients, year_filters, language_filters, q5_word_workers=5,
-                     historical_shards=5, candidate_shards=5, preprocess_workers=5, q4_shards=2, *,
+                     historical_shards=5, candidate_shards=5, preprocess_workers=5, q4_shards=2,
+                     q3_shards=2, *,
                      biography_filters=1, image_fetchers=1):
     # Common services
     services = ["services:\n", RABBITMQ]
@@ -350,6 +412,14 @@ def generate_compose(clients, year_filters, language_filters, q5_word_workers=5,
     for index in range(1, preprocess_workers + 1):
         services.append(preprocess(index))
         filter_names.append(f"preprocess_{index}")
+
+    # Q3
+    services.append(q3_shared_words(q3_shards))
+    for shard_id in range(q3_shards):
+        services.append(q3_shared_shard(shard_id))
+    services.append(q3_join(q3_shards))
+    filter_names += ["q3-shared-words", "q3-join"]
+    filter_names += [f"q3-shared-{shard_id}" for shard_id in range(q3_shards)]
 
     # Q4
     services.append(word_sharder(q4_shards))
@@ -418,18 +488,21 @@ def main():
     parser.add_argument("--image-fetchers", type=int, default=3, help="image download workers (default: 3)")
     parser.add_argument("--preprocess-workers", type=int, default=3, help="shared preprocessing workers for both year branches")
     parser.add_argument("--q4-sums", type=int, default=2, help="Q4 word-count shards (default: 2)")
+    parser.add_argument("--q3-shards", type=int, default=2, help="Q3 shared-word shards (default: 2)")
     parser.add_argument("--q5-word-workers", type=int, default=3, help="word-count workers per Q5 branch")
     parser.add_argument("--q5-historical-shards", type=int, default=3)
     parser.add_argument("--q5-candidate-shards", type=int, default=3)
     args = parser.parse_args()
     if args.clients < 0 or min(args.year_filters, args.language_filters, args.q5_word_workers,
                                args.q5_historical_shards, args.q5_candidate_shards, args.preprocess_workers,
-                               args.biography_filters, args.image_fetchers, args.q4_sums) < 1:
+                               args.biography_filters, args.image_fetchers, args.q4_sums,
+                               args.q3_shards) < 1:
         parser.error("clients must be >= 0; worker and shard counts must be >= 1")
 
     contents = generate_compose(args.clients, args.year_filters, args.language_filters,
                                 args.q5_word_workers, args.q5_historical_shards, args.q5_candidate_shards,
                                 args.preprocess_workers, q4_shards=args.q4_sums,
+                                q3_shards=args.q3_shards,
                                 biography_filters=args.biography_filters,
                                 image_fetchers=args.image_fetchers)
     output = PROJECT_ROOT / "docker-compose.yaml"
@@ -437,6 +510,7 @@ def main():
     print(f"Generated {output}: {args.clients} clients, 1 gateway, "
           f"{args.preprocess_workers} preprocessing workers, "
           f"{args.q4_sums} Q4 sum shards, "
+          f"{args.q3_shards} Q3 shared-word shards, "
           f"{args.q5_word_workers} Q5 word-count workers, "
           f"{args.q5_historical_shards} Q5 historical shards, "
           f"{args.q5_candidate_shards} Q5 candidate shards, "
