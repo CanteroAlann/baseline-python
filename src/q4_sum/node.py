@@ -25,9 +25,13 @@ class Q4SumNode(MessageHelper):
         })
         # logging.info(f"Received message: {message.type} with word {message.word} and count {message.word_count}")
         if message.type == MsgType.WORD_COUNT:
-            # va sumando las palabras por cada mensaje recibido
-            state["counts"][message.word] += message.word_count
-            state["received"] += 1
+            # logging.info("q4_sum shard=%s received WORD_COUNT words=%d", self.shard_id, len(message.result))
+
+            for word in message.result:
+                state["counts"][word] += 1
+            
+            state["received"] += len(message.result)
+
         elif message.is_eof():
             state["expected"] = message.expected_messages
         else:

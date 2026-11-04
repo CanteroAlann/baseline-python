@@ -179,7 +179,7 @@ def preprocess(index):
         condition: service_healthy
 """
 
-def word_sharder(q4_shards):
+def word_sharder(q4_shards, batch_size=5):
     return f"""  word-sharder:
     build:
       context: .
@@ -193,6 +193,7 @@ def word_sharder(q4_shards):
       CONTROL_QUEUE: control.q4_sum
       OUTPUT_EXCHANGE: q4.words
       Q4_SHARD_COUNT: "{q4_shards}"
+      BATCH_SIZE: "{batch_size}"
     depends_on:
       rabbitmq:
         condition: service_healthy

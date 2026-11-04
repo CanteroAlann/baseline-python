@@ -1,3 +1,5 @@
+import logging
+import os
 import zlib
 
 from common.article.clean_article import CleanArticle
@@ -13,6 +15,7 @@ class WordSharderNode(MessageHelper):
         self.control = control
         self.shard_count = shard_count
         self.input_eofs = {}
+        self.batch_size = int(os.environ.get("BATCH_SIZE", 5))
         
     def process_message(self, body, ack, nack):
         # Forzamos a deserializar como CleanArticle
@@ -26,17 +29,28 @@ class WordSharderNode(MessageHelper):
             article = message.require_article()
             words_by_shard = [[] for _ in range(self.shard_count)]
             # aplica el hash para cada palabra y la asigna a un shard
+            logging.info(f"words_by_shard before: {len(words_by_shard)}")
             for word in article.abstract:
                 shard_id = zlib.crc32(word.encode("utf-8")) % self.shard_count
                 words_by_shard[shard_id].append(word)
 
+            # debug
+            # largos = {k: len(v) for k, v in enumerate(words_by_shard)}
+            # logging.info(f"words_by_shard: {largos}")
+            # logging.info(f"article.abstract: {len(article.abstract)}: {list(article.abstract)[:10]}")
+
             # por cada shard manda DONE al coordinador y WORD_COUNT al nodo de sum correspondiente
             for shard_id, words in enumerate(words_by_shard):
                 route = f"q4.sum.{shard_id}"
-                for word in words:
+                for i in range(0, len(words), self.batch_size):
+                    chunk = words[i:i + self.batch_size]
+                    
+                    # envia el chunk en un solo mensaje
                     data = Message(MsgType.WORD_COUNT, session, article_id=message.article_id,
-                                   shard_id=shard_id, word=word, word_count=1)
+                                   shard_id=shard_id, result=chunk)
                     self.outgoing_exchange.send(internal.serialize(data), routing_key=route)
+                    
+                # por cada chunk enviado, avisa al coordinador cuantas palabras fueron
                 done = Message(MsgType.DONE, session, output=route, produced_count=len(words))
                 self.control.send(internal.serialize(done))
 
