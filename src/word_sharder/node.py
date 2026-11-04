@@ -1,20 +1,18 @@
-from collections import defaultdict
+import zlib
+
 from common.article.clean_article import CleanArticle
-from common.message_helper import MessageHelper
-from common.message import Message
 from common.enums import MsgType
-from common.coordination import CoordinatorState
+from common.message import Message
+from common.message_helper import MessageHelper
 from common.message_protocol import internal
 
 class WordSharderNode(MessageHelper):
-    def __init__(self, incoming, outgoing_exchange, control):
+    def __init__(self, incoming, outgoing_exchange, control, shard_count):
         super().__init__(incoming, None)
         self.outgoing_exchange = outgoing_exchange
         self.control = control
-        # Estado por sesión (cliente): { session_id: CoordinatorState }
-        self.sessions = {}
-        # Conteo por sesión: { session_id: defaultdict(int) }
-        self.counts = {}
+        self.shard_count = shard_count
+        self.input_eofs = {}
         
     def process_message(self, body, ack, nack):
         # Forzamos a deserializar como CleanArticle
@@ -24,33 +22,33 @@ class WordSharderNode(MessageHelper):
 
     def handle(self, message: Message):
         session = message.session_id
-        if session not in self.sessions:
-            self.sessions[session] = CoordinatorState(outputs={})
-            self.counts[session] = defaultdict(int)
-
-        state = self.sessions[session]
-
         if message.is_article():
             article = message.require_article()
-            # article.abstract es un set, ya viene sin stopwords
+            words_by_shard = [[] for _ in range(self.shard_count)]
+            # aplica el hash para cada palabra y la asigna a un shard
             for word in article.abstract:
-                self.counts[session][word] += 1
-            
-            # Avisamos al coordinador que terminamos este artículo
-            self.control.send(internal.serialize(Message(MsgType.DONE, session, output="output")))
-            
-        elif message.is_eof():
-            state.set_expected_count(message.expected_messages)
+                shard_id = zlib.crc32(word.encode("utf-8")) % self.shard_count
+                words_by_shard[shard_id].append(word)
 
-        # Si ya recibimos todos los artículos de este cliente
-        if state.is_complete():
-            # Top 20 global
-            top_20 = sorted(self.counts[session].items(), key=lambda x: x[1], reverse=True)[:20]
-            
-            # Mandamos el resultado al Gateway (query_id=4)
-            result_msg = Message(MsgType.QUERY_RESULT, session_id=session, query_id=4, article_id=0, result=top_20)
-            self.outgoing_exchange.send(internal.serialize(result_msg), routing_key=session)
-            
-            # Limpiamos la memoria
-            del self.sessions[session]
-            del self.counts[session]
+            # por cada shard manda DONE al coordinador y WORD_COUNT al nodo de sum correspondiente
+            for shard_id, words in enumerate(words_by_shard):
+                route = f"q4.sum.{shard_id}"
+                for word in words:
+                    data = Message(MsgType.WORD_COUNT, session, article_id=message.article_id,
+                                   shard_id=shard_id, word=word, word_count=1)
+                    self.outgoing_exchange.send(internal.serialize(data), routing_key=route)
+                done = Message(MsgType.DONE, session, output=route, produced_count=len(words))
+                self.control.send(internal.serialize(done))
+
+        elif message.is_eof():
+            state = self.input_eofs.setdefault(session, {"count": 0, "expected": 0})
+            state["count"] += 1
+            state["expected"] += message.expected_messages or 0
+            # ya que son pre2020 y post2020, esperamos 2 EOFs por sesión
+            if state["count"] == 2:
+                for shard_id in range(self.shard_count):
+                    route = f"q4.sum.{shard_id}"
+                    eof = Message(MsgType.INPUT_EOF, session, expected_messages=state["expected"],
+                                  output=route)
+                    self.control.send(internal.serialize(eof))
+                del self.input_eofs[session]

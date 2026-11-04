@@ -73,105 +73,7 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
-  coordinator_q5_historical_words:
-    build:
-      context: .
-      dockerfile: src/coordinator/Dockerfile
-    environment:
-      PYTHONUNBUFFERED: "1"
-      MOM_HOST: rabbitmq
-      INPUT_QUEUE: control.q5_historical_words
-      OUTPUT_EXCHANGE: q5.historical.counts
-      OUTPUT_ROUTING_KEYS: 'q5.historical.0,q5.historical.1,q5.historical.2'
-      OUTPUT_BINDINGS: '{"q5.historical.0": "q5.historical.0", "q5.historical.1": "q5.historical.1", "q5.historical.2": "q5.historical.2"}'
-      QUERY_ID: ''
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-  coordinator_q5_candidate_words:
-    build:
-      context: .
-      dockerfile: src/coordinator/Dockerfile
-    environment:
-      PYTHONUNBUFFERED: "1"
-      MOM_HOST: rabbitmq
-      INPUT_QUEUE: control.q5_candidate_words
-      OUTPUT_EXCHANGE: q5.candidate.counts
-      OUTPUT_ROUTING_KEYS: 'q5.candidate.0,q5.candidate.1,q5.candidate.2'
-      OUTPUT_BINDINGS: '{"q5.candidate.0": "q5.candidate.0", "q5.candidate.1": "q5.candidate.1", "q5.candidate.2": "q5.candidate.2"}'
-      QUERY_ID: ''
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-  coordinator_biography:
-    build:
-      context: .
-      dockerfile: src/coordinator/Dockerfile
-    environment:
-      PYTHONUNBUFFERED: "1"
-      MOM_HOST: rabbitmq
-      INPUT_QUEUE: control.biography
-      OUTPUT_EXCHANGE: q2_image_requests_exchange
-      OUTPUT_ROUTING_KEYS: 'q2.images'
-      OUTPUT_BINDINGS: '{"q2_image_requests": "q2.images"}'
-      QUERY_ID: ''
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-  coordinator_images:
-    build:
-      context: .
-      dockerfile: src/coordinator/Dockerfile
-    environment:
-      PYTHONUNBUFFERED: "1"
-      MOM_HOST: rabbitmq
-      INPUT_QUEUE: control.images
-      OUTPUT_EXCHANGE: article_results
-      OUTPUT_ROUTING_KEYS: ''
-      OUTPUT_BINDINGS: '{}'
-      QUERY_ID: '2'
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
   year-filter_1:
-    build:
-      context: .
-      dockerfile: src/filters/year_filter/Dockerfile
-    environment:
-      PYTHONUNBUFFERED: "1"
-      MOM_HOST: rabbitmq
-      INPUT_QUEUE: articles
-      CONTROL_QUEUE: control.year
-      OUTPUT_EXCHANGE: articles_by_year
-      PRE2020_QUEUE: articles_pre2020
-      PREPROCESS_QUEUE: articles_to_preprocess
-      PREPROCESS_ROUTING_KEY: article.*
-      BIOGRAPHY_QUEUE: articles_biography
-      PRE2020_ROUTING_KEY: article.pre2020
-      POST2020_ROUTING_KEY: article.post2020
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-  year-filter_2:
-    build:
-      context: .
-      dockerfile: src/filters/year_filter/Dockerfile
-    environment:
-      PYTHONUNBUFFERED: "1"
-      MOM_HOST: rabbitmq
-      INPUT_QUEUE: articles
-      CONTROL_QUEUE: control.year
-      OUTPUT_EXCHANGE: articles_by_year
-      PRE2020_QUEUE: articles_pre2020
-      PREPROCESS_QUEUE: articles_to_preprocess
-      PREPROCESS_ROUTING_KEY: article.*
-      BIOGRAPHY_QUEUE: articles_biography
-      PRE2020_ROUTING_KEY: article.pre2020
-      POST2020_ROUTING_KEY: article.post2020
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-  year-filter_3:
     build:
       context: .
       dockerfile: src/filters/year_filter/Dockerfile
@@ -205,36 +107,6 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
-  language-filter_2:
-    build:
-      context: .
-      dockerfile: src/filters/language_filter/Dockerfile
-    environment:
-      PYTHONUNBUFFERED: "1"
-      MOM_HOST: rabbitmq
-      INPUT_QUEUE: articles_pre2020
-      CONTROL_QUEUE: control.language
-      INPUT_EXCHANGE: articles_by_year
-      INPUT_ROUTING_KEY: article.pre2020
-      OUTPUT_EXCHANGE: article_results
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-  language-filter_3:
-    build:
-      context: .
-      dockerfile: src/filters/language_filter/Dockerfile
-    environment:
-      PYTHONUNBUFFERED: "1"
-      MOM_HOST: rabbitmq
-      INPUT_QUEUE: articles_pre2020
-      CONTROL_QUEUE: control.language
-      INPUT_EXCHANGE: articles_by_year
-      INPUT_ROUTING_KEY: article.pre2020
-      OUTPUT_EXCHANGE: article_results
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
   preprocess_1:
     build:
       context: .
@@ -250,351 +122,80 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
-  preprocess_2:
+  word-sharder:
     build:
       context: .
-      dockerfile: src/preprocess/Dockerfile
+      dockerfile: src/word_sharder/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
       MOM_HOST: rabbitmq
-      INPUT_QUEUE: articles_to_preprocess
-      INPUT_EXCHANGE: articles_by_year
+      INPUT_QUEUE: word_sharder_queue
+      INPUT_EXCHANGE: preprocessed_articles
       INPUT_ROUTING_KEY: article.*
-      OUTPUT_EXCHANGE: preprocessed_articles
-      CONTROL_QUEUE: control.preprocess
+      CONTROL_QUEUE: control.word_sharder
+      OUTPUT_EXCHANGE: q4.words
+      Q4_SHARD_COUNT: "2"
     depends_on:
       rabbitmq:
         condition: service_healthy
-  preprocess_3:
-    build:
-      context: .
-      dockerfile: src/preprocess/Dockerfile
-    environment:
-      PYTHONUNBUFFERED: "1"
-      MOM_HOST: rabbitmq
-      INPUT_QUEUE: articles_to_preprocess
-      INPUT_EXCHANGE: articles_by_year
-      INPUT_ROUTING_KEY: article.*
-      OUTPUT_EXCHANGE: preprocessed_articles
-      CONTROL_QUEUE: control.preprocess
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-  q5-historical-words_1:
-    build:
-      context: .
-      dockerfile: src/word_count/Dockerfile
-    environment:
-      PYTHONUNBUFFERED: "1"
-      MOM_HOST: rabbitmq
-      INPUT_QUEUE: preprocessed_pre2020
-      INPUT_EXCHANGE: preprocessed_articles
-      INPUT_ROUTING_KEY: article.pre2020
-      OUTPUT_EXCHANGE: q5.historical.counts
-      CONTROL_QUEUE: control.q5_historical_words
-      BRANCH: historical
-      SHARD_COUNT: "3"
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-  q5-historical-words_2:
-    build:
-      context: .
-      dockerfile: src/word_count/Dockerfile
-    environment:
-      PYTHONUNBUFFERED: "1"
-      MOM_HOST: rabbitmq
-      INPUT_QUEUE: preprocessed_pre2020
-      INPUT_EXCHANGE: preprocessed_articles
-      INPUT_ROUTING_KEY: article.pre2020
-      OUTPUT_EXCHANGE: q5.historical.counts
-      CONTROL_QUEUE: control.q5_historical_words
-      BRANCH: historical
-      SHARD_COUNT: "3"
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-  q5-historical-words_3:
-    build:
-      context: .
-      dockerfile: src/word_count/Dockerfile
-    environment:
-      PYTHONUNBUFFERED: "1"
-      MOM_HOST: rabbitmq
-      INPUT_QUEUE: preprocessed_pre2020
-      INPUT_EXCHANGE: preprocessed_articles
-      INPUT_ROUTING_KEY: article.pre2020
-      OUTPUT_EXCHANGE: q5.historical.counts
-      CONTROL_QUEUE: control.q5_historical_words
-      BRANCH: historical
-      SHARD_COUNT: "3"
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-  q5-candidate-words_1:
-    build:
-      context: .
-      dockerfile: src/word_count/Dockerfile
-    environment:
-      PYTHONUNBUFFERED: "1"
-      MOM_HOST: rabbitmq
-      INPUT_QUEUE: preprocessed_post2020
-      INPUT_EXCHANGE: preprocessed_articles
-      INPUT_ROUTING_KEY: article.post2020
-      OUTPUT_EXCHANGE: q5.candidate.counts
-      CONTROL_QUEUE: control.q5_candidate_words
-      BRANCH: candidate
-      SHARD_COUNT: "3"
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-  q5-candidate-words_2:
-    build:
-      context: .
-      dockerfile: src/word_count/Dockerfile
-    environment:
-      PYTHONUNBUFFERED: "1"
-      MOM_HOST: rabbitmq
-      INPUT_QUEUE: preprocessed_post2020
-      INPUT_EXCHANGE: preprocessed_articles
-      INPUT_ROUTING_KEY: article.post2020
-      OUTPUT_EXCHANGE: q5.candidate.counts
-      CONTROL_QUEUE: control.q5_candidate_words
-      BRANCH: candidate
-      SHARD_COUNT: "3"
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-  q5-candidate-words_3:
-    build:
-      context: .
-      dockerfile: src/word_count/Dockerfile
-    environment:
-      PYTHONUNBUFFERED: "1"
-      MOM_HOST: rabbitmq
-      INPUT_QUEUE: preprocessed_post2020
-      INPUT_EXCHANGE: preprocessed_articles
-      INPUT_ROUTING_KEY: article.post2020
-      OUTPUT_EXCHANGE: q5.candidate.counts
-      CONTROL_QUEUE: control.q5_candidate_words
-      BRANCH: candidate
-      SHARD_COUNT: "3"
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-  q5-historical_1:
-    build:
-      context: .
-      dockerfile: src/historical/Dockerfile
-    environment:
-      PYTHONUNBUFFERED: "1"
-      MOM_HOST: rabbitmq
-      INPUT_QUEUE: q5.historical.0
-      INPUT_EXCHANGE: q5.historical.counts
-      INPUT_ROUTING_KEY: q5.historical.0
-      OUTPUT_QUEUE: q5.historical.reducer
-      SHARD_ID: "0"
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-  q5-historical_2:
-    build:
-      context: .
-      dockerfile: src/historical/Dockerfile
-    environment:
-      PYTHONUNBUFFERED: "1"
-      MOM_HOST: rabbitmq
-      INPUT_QUEUE: q5.historical.1
-      INPUT_EXCHANGE: q5.historical.counts
-      INPUT_ROUTING_KEY: q5.historical.1
-      OUTPUT_QUEUE: q5.historical.reducer
-      SHARD_ID: "1"
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-  q5-historical_3:
-    build:
-      context: .
-      dockerfile: src/historical/Dockerfile
-    environment:
-      PYTHONUNBUFFERED: "1"
-      MOM_HOST: rabbitmq
-      INPUT_QUEUE: q5.historical.2
-      INPUT_EXCHANGE: q5.historical.counts
-      INPUT_ROUTING_KEY: q5.historical.2
-      OUTPUT_QUEUE: q5.historical.reducer
-      SHARD_ID: "2"
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-  q5-candidate_1:
-    build:
-      context: .
-      dockerfile: src/candidate/Dockerfile
-    environment:
-      PYTHONUNBUFFERED: "1"
-      MOM_HOST: rabbitmq
-      INPUT_QUEUE: q5.candidate.0
-      INPUT_EXCHANGE: q5.candidate.counts
-      INPUT_ROUTING_KEY: q5.candidate.0
-      AVERAGE_EXCHANGE: q5.average
-      RESULT_EXCHANGE: article_results
-      CONTROL_QUEUE: control.q5_done
-      SHARD_ID: "0"
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-  q5-candidate_2:
-    build:
-      context: .
-      dockerfile: src/candidate/Dockerfile
-    environment:
-      PYTHONUNBUFFERED: "1"
-      MOM_HOST: rabbitmq
-      INPUT_QUEUE: q5.candidate.1
-      INPUT_EXCHANGE: q5.candidate.counts
-      INPUT_ROUTING_KEY: q5.candidate.1
-      AVERAGE_EXCHANGE: q5.average
-      RESULT_EXCHANGE: article_results
-      CONTROL_QUEUE: control.q5_done
-      SHARD_ID: "1"
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-  q5-candidate_3:
-    build:
-      context: .
-      dockerfile: src/candidate/Dockerfile
-    environment:
-      PYTHONUNBUFFERED: "1"
-      MOM_HOST: rabbitmq
-      INPUT_QUEUE: q5.candidate.2
-      INPUT_EXCHANGE: q5.candidate.counts
-      INPUT_ROUTING_KEY: q5.candidate.2
-      AVERAGE_EXCHANGE: q5.average
-      RESULT_EXCHANGE: article_results
-      CONTROL_QUEUE: control.q5_done
-      SHARD_ID: "2"
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-  q5-historical-reducer:
-    build:
-      context: .
-      dockerfile: src/historical_reducer/Dockerfile
-    environment:
-      PYTHONUNBUFFERED: "1"
-      MOM_HOST: rabbitmq
-      INPUT_QUEUE: q5.historical.reducer
-      OUTPUT_EXCHANGE: q5.average
-      HIST_SHARD_COUNT: "3"
-      CANDIDATE_SHARD_COUNT: "3"
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-  coordinator_q5_final:
+  coordinator_word_sharder:
     build:
       context: .
       dockerfile: src/coordinator/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
       MOM_HOST: rabbitmq
-      INPUT_QUEUE: control.q5_done
+      INPUT_QUEUE: control.word_sharder
+      OUTPUT_EXCHANGE: q4.words
+      OUTPUT_ROUTING_KEYS: 'q4.sum.0,q4.sum.1'
+      OUTPUT_BINDINGS: '{"q4.sum.0": "q4.sum.0", "q4.sum.1": "q4.sum.1"}'
+      QUERY_ID: ''
+      INDEPENDENT_ROUTES: "true"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+  q4-sum-0:
+    build:
+      context: .
+      dockerfile: src/q4_sum/Dockerfile
+    environment:
+      PYTHONUNBUFFERED: "1"
+      MOM_HOST: rabbitmq
+      INPUT_QUEUE: q4.sum.0
+      OUTPUT_EXCHANGE: q4.tops
+      SHARD_ID: "0"
+    depends_on:
+      coordinator_word_sharder:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+  q4-sum-1:
+    build:
+      context: .
+      dockerfile: src/q4_sum/Dockerfile
+    environment:
+      PYTHONUNBUFFERED: "1"
+      MOM_HOST: rabbitmq
+      INPUT_QUEUE: q4.sum.1
+      OUTPUT_EXCHANGE: q4.tops
+      SHARD_ID: "1"
+    depends_on:
+      coordinator_word_sharder:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+  q4-join:
+    build:
+      context: .
+      dockerfile: src/q4_join/Dockerfile
+    environment:
+      PYTHONUNBUFFERED: "1"
+      MOM_HOST: rabbitmq
+      INPUT_QUEUE: q4.join
+      INPUT_EXCHANGE: q4.tops
+      INPUT_ROUTING_KEY: q4.tops
       OUTPUT_EXCHANGE: article_results
-      OUTPUT_ROUTING_KEYS: ''
-      OUTPUT_BINDINGS: '{}'
-      QUERY_ID: '5'
-      EXPECTED_INPUTS: "3"
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-  biography-filter_1:
-    build:
-      context: .
-      dockerfile: src/filters/biography_filter/Dockerfile
-    environment:
-      PYTHONUNBUFFERED: "1"
-      MOM_HOST: rabbitmq
-      INPUT_QUEUE: articles_biography
-      CONTROL_QUEUE: control.biography
-      OUTPUT_QUEUE: q2_image_requests
-      INPUT_EXCHANGE: articles_by_year
-      INPUT_ROUTING_KEY: article.pre2020
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-  biography-filter_2:
-    build:
-      context: .
-      dockerfile: src/filters/biography_filter/Dockerfile
-    environment:
-      PYTHONUNBUFFERED: "1"
-      MOM_HOST: rabbitmq
-      INPUT_QUEUE: articles_biography
-      CONTROL_QUEUE: control.biography
-      OUTPUT_QUEUE: q2_image_requests
-      INPUT_EXCHANGE: articles_by_year
-      INPUT_ROUTING_KEY: article.pre2020
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-  biography-filter_3:
-    build:
-      context: .
-      dockerfile: src/filters/biography_filter/Dockerfile
-    environment:
-      PYTHONUNBUFFERED: "1"
-      MOM_HOST: rabbitmq
-      INPUT_QUEUE: articles_biography
-      CONTROL_QUEUE: control.biography
-      OUTPUT_QUEUE: q2_image_requests
-      INPUT_EXCHANGE: articles_by_year
-      INPUT_ROUTING_KEY: article.pre2020
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-  image-fetcher_1:
-    build:
-      context: .
-      dockerfile: src/filters/image_fetcher/Dockerfile
-    environment:
-      PYTHONUNBUFFERED: "1"
-      MOM_HOST: rabbitmq
-      INPUT_QUEUE: q2_image_requests
-      CONTROL_QUEUE: control.images
-      OUTPUT_EXCHANGE: article_results
-      IMAGE_FETCH_TIMEOUT: "15"
-      IMAGE_MAX_BYTES: "20971520"
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-  image-fetcher_2:
-    build:
-      context: .
-      dockerfile: src/filters/image_fetcher/Dockerfile
-    environment:
-      PYTHONUNBUFFERED: "1"
-      MOM_HOST: rabbitmq
-      INPUT_QUEUE: q2_image_requests
-      CONTROL_QUEUE: control.images
-      OUTPUT_EXCHANGE: article_results
-      IMAGE_FETCH_TIMEOUT: "15"
-      IMAGE_MAX_BYTES: "20971520"
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-  image-fetcher_3:
-    build:
-      context: .
-      dockerfile: src/filters/image_fetcher/Dockerfile
-    environment:
-      PYTHONUNBUFFERED: "1"
-      MOM_HOST: rabbitmq
-      INPUT_QUEUE: q2_image_requests
-      CONTROL_QUEUE: control.images
-      OUTPUT_EXCHANGE: article_results
-      IMAGE_FETCH_TIMEOUT: "15"
-      IMAGE_MAX_BYTES: "20971520"
+      SHARD_COUNT: "2"
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -604,7 +205,7 @@ services:
       dockerfile: src/client/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
-      INPUT_FILE: /data/file1.csv
+      INPUT_FILE: /data/file_articulos_q4.csv
       SERVER_HOST: gateway_1
       SERVER_PORT: "5000"
     volumes:
@@ -613,88 +214,13 @@ services:
     depends_on:
       - gateway_1
       - year-filter_1
-      - year-filter_2
-      - year-filter_3
       - language-filter_1
-      - language-filter_2
-      - language-filter_3
-      - biography-filter_1
-      - biography-filter_2
-      - biography-filter_3
-      - image-fetcher_1
-      - image-fetcher_2
-      - image-fetcher_3
       - coordinator_preprocess
-      - coordinator_q5_historical_words
-      - coordinator_q5_candidate_words
       - preprocess_1
-      - preprocess_2
-      - preprocess_3
-      - q5-historical-words_1
-      - q5-historical-words_2
-      - q5-historical-words_3
-      - q5-candidate-words_1
-      - q5-candidate-words_2
-      - q5-candidate-words_3
-      - q5-historical_1
-      - q5-historical_2
-      - q5-historical_3
-      - q5-candidate_1
-      - q5-candidate_2
-      - q5-candidate_3
-      - q5-historical-reducer
-      - coordinator_q5_final
+      - q4-sum-0
+      - q4-sum-1
+      - word-sharder
+      - coordinator_word_sharder
+      - q4-join
       - coordinator_year
       - coordinator_language
-      - coordinator_biography
-      - coordinator_images
-  client_2:
-    build:
-      context: .
-      dockerfile: src/client/Dockerfile
-    environment:
-      PYTHONUNBUFFERED: "1"
-      INPUT_FILE: /data/file2.csv
-      SERVER_HOST: gateway_1
-      SERVER_PORT: "5000"
-    volumes:
-      - ./samples:/data:ro
-      - ./output/client_2:/output
-    depends_on:
-      - gateway_1
-      - year-filter_1
-      - year-filter_2
-      - year-filter_3
-      - language-filter_1
-      - language-filter_2
-      - language-filter_3
-      - biography-filter_1
-      - biography-filter_2
-      - biography-filter_3
-      - image-fetcher_1
-      - image-fetcher_2
-      - image-fetcher_3
-      - coordinator_preprocess
-      - coordinator_q5_historical_words
-      - coordinator_q5_candidate_words
-      - preprocess_1
-      - preprocess_2
-      - preprocess_3
-      - q5-historical-words_1
-      - q5-historical-words_2
-      - q5-historical-words_3
-      - q5-candidate-words_1
-      - q5-candidate-words_2
-      - q5-candidate-words_3
-      - q5-historical_1
-      - q5-historical_2
-      - q5-historical_3
-      - q5-candidate_1
-      - q5-candidate_2
-      - q5-candidate_3
-      - q5-historical-reducer
-      - coordinator_q5_final
-      - coordinator_year
-      - coordinator_language
-      - coordinator_biography
-      - coordinator_images

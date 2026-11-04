@@ -18,7 +18,8 @@ class MsgType(IntEnum):
     WORD_COUNT = 9
     HIST_PARTIAL = 10
     AVG_READY = 11
+    TOP_LOCAL = 12
 
 
 QUERY_IDS = (1, 2, 3, 4, 5)
-QUERY_COUNT = 3  # Queries 1, 5, and 2? are implemented.
+QUERY_COUNT = 4  # Queries 1, 5, and 2? are implemented.

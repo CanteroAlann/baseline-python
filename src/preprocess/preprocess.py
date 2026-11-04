@@ -1,3 +1,4 @@
+import logging
 import re
 
 from nltk.corpus import stopwords
@@ -15,7 +16,13 @@ def extract_non_stopwords_from_abstract(paragraph):
     if not isinstance(paragraph, str):
         return []
     words = re.findall(WORD_REGEX, paragraph.lower())
-    return [word for word in words if word not in STOP_WORDS and not re.fullmatch(NUMBER_REGEX, word)]
+
+
+    filtered = [word for word in words if word not in STOP_WORDS and not re.fullmatch(NUMBER_REGEX, word)]
+    logging.info(f"Abstract filtered ({len(set(filtered))}): {filtered[:10]}...")
+   
+    return filtered
+
 
 
 class Preprocessor:
