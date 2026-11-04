@@ -53,7 +53,7 @@ def _recv_empty(sock):
 
 
 def _recv_query_message(sock):
-    return internal.deserialize(_recv_string(sock).encode("utf-8"))
+    return internal.deserialize(_recv_bytes(sock))
 
 
 def _send_query_message(sock, message: Message):

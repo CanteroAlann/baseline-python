@@ -451,7 +451,10 @@ def generate_compose(clients, year_filters, language_filters, q5_word_workers=5,
       services.append(client(index, filter_names + [
         "coordinator_year", "coordinator_language", "coordinator_biography", "coordinator_images",
       ]))
-    return "".join(services)
+    return "".join(services).replace(
+        '      PYTHONUNBUFFERED: "1"\n',
+        '      PYTHONUNBUFFERED: "1"\n      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"\n',
+    )
 
 
 def main():

@@ -19,6 +19,7 @@ services:
       dockerfile: src/gateway/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       SERVER_HOST: 0.0.0.0
       SERVER_PORT: "5000"
       MOM_HOST: rabbitmq
@@ -33,6 +34,7 @@ services:
       dockerfile: src/coordinator/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: control.year
       OUTPUT_EXCHANGE: articles_by_year
@@ -48,6 +50,7 @@ services:
       dockerfile: src/coordinator/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: control.language
       OUTPUT_EXCHANGE: article_results
@@ -63,6 +66,7 @@ services:
       dockerfile: src/coordinator/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: control.preprocess
       OUTPUT_EXCHANGE: preprocessed_articles
@@ -79,6 +83,7 @@ services:
       dockerfile: src/filters/year_filter/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: articles
       CONTROL_QUEUE: control.year
@@ -98,6 +103,7 @@ services:
       dockerfile: src/filters/year_filter/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: articles
       CONTROL_QUEUE: control.year
@@ -117,6 +123,7 @@ services:
       dockerfile: src/filters/year_filter/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: articles
       CONTROL_QUEUE: control.year
@@ -136,6 +143,7 @@ services:
       dockerfile: src/filters/language_filter/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: articles_pre2020
       CONTROL_QUEUE: control.language
@@ -151,6 +159,7 @@ services:
       dockerfile: src/filters/language_filter/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: articles_pre2020
       CONTROL_QUEUE: control.language
@@ -166,6 +175,7 @@ services:
       dockerfile: src/filters/language_filter/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: articles_pre2020
       CONTROL_QUEUE: control.language
@@ -181,6 +191,7 @@ services:
       dockerfile: src/preprocess/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: articles_to_preprocess
       INPUT_EXCHANGE: articles_by_year
@@ -197,6 +208,7 @@ services:
       dockerfile: src/preprocess/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: articles_to_preprocess
       INPUT_EXCHANGE: articles_by_year
@@ -213,6 +225,7 @@ services:
       dockerfile: src/preprocess/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: articles_to_preprocess
       INPUT_EXCHANGE: articles_by_year
@@ -229,6 +242,7 @@ services:
       dockerfile: src/word_sharder/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: word_sharder_queue
       INPUT_EXCHANGE: preprocessed_articles
@@ -246,6 +260,7 @@ services:
       dockerfile: src/word_sharder/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: word_sharder_queue
       INPUT_EXCHANGE: preprocessed_articles
@@ -263,6 +278,7 @@ services:
       dockerfile: src/word_sharder/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: word_sharder_queue
       INPUT_EXCHANGE: preprocessed_articles
@@ -280,6 +296,7 @@ services:
       dockerfile: src/coordinator/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: control.word_sharder
       OUTPUT_EXCHANGE: word_chunks
@@ -297,6 +314,7 @@ services:
       dockerfile: src/q3_shared_words/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: q3.shared.0
       INPUT_EXCHANGE: word_chunks
@@ -313,6 +331,7 @@ services:
       dockerfile: src/q3_shared_words/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: q3.shared.1
       INPUT_EXCHANGE: word_chunks
@@ -329,6 +348,7 @@ services:
       dockerfile: src/q3_shared_words/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: q3.shared.2
       INPUT_EXCHANGE: word_chunks
@@ -345,6 +365,7 @@ services:
       dockerfile: src/coordinator/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: control.q3_done
       OUTPUT_EXCHANGE: article_results
@@ -361,6 +382,7 @@ services:
       dockerfile: src/q4_sum/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: q4.sum.0
       INPUT_EXCHANGE: word_chunks
@@ -376,6 +398,7 @@ services:
       dockerfile: src/q4_sum/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: q4.sum.1
       INPUT_EXCHANGE: word_chunks
@@ -391,6 +414,7 @@ services:
       dockerfile: src/q4_sum/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: q4.sum.2
       INPUT_EXCHANGE: word_chunks
@@ -406,6 +430,7 @@ services:
       dockerfile: src/q4_join/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: q4.join
       OUTPUT_EXCHANGE: article_results
@@ -420,6 +445,7 @@ services:
       dockerfile: src/coordinator/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: control.q4_done
       OUTPUT_EXCHANGE: article_results
@@ -436,6 +462,7 @@ services:
       dockerfile: src/word_count/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: preprocessed_pre2020
       INPUT_EXCHANGE: preprocessed_articles
@@ -453,6 +480,7 @@ services:
       dockerfile: src/word_count/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: preprocessed_pre2020
       INPUT_EXCHANGE: preprocessed_articles
@@ -470,6 +498,7 @@ services:
       dockerfile: src/word_count/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: preprocessed_pre2020
       INPUT_EXCHANGE: preprocessed_articles
@@ -487,6 +516,7 @@ services:
       dockerfile: src/word_count/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: preprocessed_post2020
       INPUT_EXCHANGE: preprocessed_articles
@@ -504,6 +534,7 @@ services:
       dockerfile: src/word_count/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: preprocessed_post2020
       INPUT_EXCHANGE: preprocessed_articles
@@ -521,6 +552,7 @@ services:
       dockerfile: src/word_count/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: preprocessed_post2020
       INPUT_EXCHANGE: preprocessed_articles
@@ -538,6 +570,7 @@ services:
       dockerfile: src/historical/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: q5.historical.0
       INPUT_EXCHANGE: q5.historical.counts
@@ -553,6 +586,7 @@ services:
       dockerfile: src/historical/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: q5.historical.1
       INPUT_EXCHANGE: q5.historical.counts
@@ -568,6 +602,7 @@ services:
       dockerfile: src/historical/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: q5.historical.2
       INPUT_EXCHANGE: q5.historical.counts
@@ -583,6 +618,7 @@ services:
       dockerfile: src/candidate/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: q5.candidate.0
       INPUT_EXCHANGE: q5.candidate.counts
@@ -600,6 +636,7 @@ services:
       dockerfile: src/candidate/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: q5.candidate.1
       INPUT_EXCHANGE: q5.candidate.counts
@@ -617,6 +654,7 @@ services:
       dockerfile: src/candidate/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: q5.candidate.2
       INPUT_EXCHANGE: q5.candidate.counts
@@ -634,6 +672,7 @@ services:
       dockerfile: src/historical_reducer/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: q5.historical.reducer
       OUTPUT_EXCHANGE: q5.average
@@ -648,6 +687,7 @@ services:
       dockerfile: src/coordinator/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: control.q5_done
       OUTPUT_EXCHANGE: article_results
@@ -664,6 +704,7 @@ services:
       dockerfile: src/coordinator/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: control.q5_historical_words
       OUTPUT_EXCHANGE: q5.historical.counts
@@ -679,6 +720,7 @@ services:
       dockerfile: src/coordinator/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: control.q5_candidate_words
       OUTPUT_EXCHANGE: q5.candidate.counts
@@ -694,6 +736,7 @@ services:
       dockerfile: src/filters/biography_filter/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: articles_biography
       CONTROL_QUEUE: control.biography
@@ -709,6 +752,7 @@ services:
       dockerfile: src/filters/biography_filter/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: articles_biography
       CONTROL_QUEUE: control.biography
@@ -724,6 +768,7 @@ services:
       dockerfile: src/filters/biography_filter/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: articles_biography
       CONTROL_QUEUE: control.biography
@@ -739,6 +784,7 @@ services:
       dockerfile: src/filters/image_fetcher/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: q2_image_requests
       CONTROL_QUEUE: control.images
@@ -754,6 +800,7 @@ services:
       dockerfile: src/filters/image_fetcher/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: q2_image_requests
       CONTROL_QUEUE: control.images
@@ -769,6 +816,7 @@ services:
       dockerfile: src/filters/image_fetcher/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: q2_image_requests
       CONTROL_QUEUE: control.images
@@ -784,6 +832,7 @@ services:
       dockerfile: src/coordinator/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: control.biography
       OUTPUT_EXCHANGE: q2_image_requests_exchange
@@ -799,6 +848,7 @@ services:
       dockerfile: src/coordinator/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: control.images
       OUTPUT_EXCHANGE: article_results
@@ -814,6 +864,7 @@ services:
       dockerfile: src/client/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       INPUT_FILE: /data/file1.csv
       SERVER_HOST: gateway_1
       SERVER_PORT: "5000"
@@ -877,6 +928,7 @@ services:
       dockerfile: src/client/Dockerfile
     environment:
       PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
       INPUT_FILE: /data/file2.csv
       SERVER_HOST: gateway_1
       SERVER_PORT: "5000"
