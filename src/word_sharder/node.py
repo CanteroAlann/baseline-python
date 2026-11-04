@@ -7,6 +7,7 @@ from common.message_helper import MessageHelper
 from common.message_protocol import internal
 
 BATCH_SIZE = 5
+WORD_ROUTING_PREFIX = "word.shard"
 
 
 class WordSharderNode(MessageHelper):
@@ -34,12 +35,13 @@ class WordSharderNode(MessageHelper):
                 words_by_shard[shard_id].append(word)
 
             for shard_id, words in enumerate(words_by_shard):
-                route = f"q4.sum.{shard_id}"
+                route = f"{WORD_ROUTING_PREFIX}.{shard_id}"
                 produced = 0
                 for index in range(0, len(words), BATCH_SIZE):
                     chunk = words[index:index + BATCH_SIZE]
                     data = Message(MsgType.WORD_COUNT, session, article_id=message.article_id,
-                                   shard_id=shard_id, result=chunk)
+                                   shard_id=shard_id, result=chunk,
+                                   language=(article.in_language or "").lower())
                     self.outgoing_exchange.send(internal.serialize(data), routing_key=route)
                     produced += 1
                 done = Message(MsgType.DONE, session, output=route, produced_count=produced)

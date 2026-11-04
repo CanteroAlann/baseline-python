@@ -22,4 +22,6 @@ class MsgType(IntEnum):
 
 
 QUERY_IDS = (1, 2, 3, 4, 5)
-QUERY_COUNT = 5
+# Keep this aligned with the services in generate_compose.py
+ENABLED_QUERY_IDS = (1, 2, 3, 4, 5)
+QUERY_COUNT = len(ENABLED_QUERY_IDS)

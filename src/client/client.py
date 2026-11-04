@@ -48,6 +48,12 @@ def _result_for_log(result):
     return result
 
 
+def _result_count(query_id, items):
+    if query_id == 3:
+        return sum(len(batch) for batch in items)
+    return len(items)
+
+
 class Client:
     def save_results(self, final_results, output_dir: Path = OUTPUT_DIR):
         output_dir = Path(output_dir)
@@ -58,7 +64,7 @@ class Client:
         with txt_path.open("w", encoding="utf-8") as f:
             for query_id in sorted(final_results.keys()):
                 items = final_results[query_id]
-                f.write(f"=== Query {query_id} ({len(items)} resultados) ===\n")
+                f.write(f"=== Query {query_id} ({_result_count(query_id, items)} resultados) ===\n")
                 for idx, item in enumerate(items):
                     if isinstance(item, dict) and "image_bytes" in item:
                         # no volcar el base64 gigante al txt
@@ -167,5 +173,6 @@ class Client:
             records.sort(key=lambda record: record.article_id or 0)
             final_results[query_id] = [record.result for record in records]
             logging.info("Query %s final results (%d): %s", query_id,
-                         len(records), [_result_for_log(value) for value in final_results[query_id]])
+                         _result_count(query_id, final_results[query_id]),
+                         [_result_for_log(value) for value in final_results[query_id]])
         return final_results

@@ -1,15 +1,17 @@
+import json
 import os
 from common.node_main import run_node
-from common.exchange_helper import bind_shards
 from .node import WordSharderNode
 
 OUTPUT_EXCHANGE = os.environ["OUTPUT_EXCHANGE"]
-SHARD_COUNT = int(os.environ["Q4_SHARD_COUNT"])
+SHARD_COUNT = int(os.environ["SHARD_COUNT"])
+OUTPUT_BINDINGS = json.loads(os.environ["OUTPUT_BINDINGS"])
 
 def create_output_exchange(incoming):
     exchange = incoming.create_exchange(OUTPUT_EXCHANGE)
     try:
-        bind_shards(exchange, "q4.sum", SHARD_COUNT)
+        for queue, route in OUTPUT_BINDINGS.items():
+            exchange.bind_queue(queue, route)
     except Exception:
         exchange.close()
         raise

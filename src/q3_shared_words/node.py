@@ -1,120 +1,58 @@
-import os
-import zlib
+import logging
+from dataclasses import dataclass, field
 
-from common.article import CleanArticle
-from common.coordination import Coordinator
+from common.coordination import CoordinatorState
 from common.enums import MsgType
 from common.message import Message
+from common.message_helper import MessageHelper, input_state
 from common.message_protocol import internal
 
+RESULT_BATCH_SIZE = 100
 
-class Q3SharedWordsNode:
-    """Fan out preprocessed articles and coordinate one EOF per vocabulary shard."""
 
-    def __init__(self, incoming, outgoing, shard_count):
-        if shard_count < 1:
-            raise ValueError("shard_count must be positive")
-        self.input_queue = incoming
+@dataclass
+class SharedWordsState:
+    english: set[str] = field(default_factory=set)
+    french: set[str] = field(default_factory=set)
+    input: CoordinatorState = field(default_factory=input_state)
+
+
+class Q3SharedWordsShard(MessageHelper):
+    def __init__(self, incoming, outgoing, control_queue, shard_id):
+        super().__init__(incoming, None)
         self.outgoing = outgoing
-        self.shard_count = shard_count
-        self.eof_state = {}
-        self.expected_input_routes = int(os.environ.get("INPUT_ROUTE_COUNT", "2"))
-        if self.expected_input_routes < 1:
-            raise ValueError("INPUT_ROUTE_COUNT must be positive")
-        routes = tuple(f"q3.shared.{shard_id}" for shard_id in range(shard_count))
-        self.coordinator = Coordinator(self.publish_eof, routes, independent_routes=True)
-
-    def publish_eof(self, message, routing_key):
-        self.outgoing.send(internal.serialize(message), routing_key=routing_key)
-
-    def process_message(self, body, ack, nack):
-        message = internal.deserialize(body, CleanArticle)
-        if message.is_article():
-            article = message.require_article()
-            language = (article.in_language or "").lower()
-            words = article.abstract if language in {"en", "fr"} else set()
-            by_shard = [[] for _ in range(self.shard_count)]
-            for word in words:
-                shard_id = zlib.crc32(word.encode("utf-8")) % self.shard_count
-                by_shard[shard_id].append(word)
-
-            for shard_id, shard_words in enumerate(by_shard):
-                route = f"q3.shared.{shard_id}"
-                data = Message(
-                    MsgType.WORD_COUNT,
-                    message.session_id,
-                    article_id=message.article_id,
-                    shard_id=shard_id,
-                    result={"language": language, "words": shard_words},
-                )
-                self.outgoing.send(internal.serialize(data), routing_key=route)
-                self.coordinator.handle(Message(
-                    MsgType.DONE, message.session_id, output=route, produced_count=1,
-                ))
-        elif message.is_eof():
-            state = self.eof_state.setdefault(
-                message.session_id, {"count": 0, "expected": 0},
-            )
-            state["count"] += 1
-            state["expected"] += message.expected_messages or 0
-            if state["count"] == self.expected_input_routes:
-                for shard_id in range(self.shard_count):
-                    route = f"q3.shared.{shard_id}"
-                    self.coordinator.handle(Message(
-                        MsgType.INPUT_EOF,
-                        message.session_id,
-                        output=route,
-                        expected_messages=state["expected"],
-                    ))
-                del self.eof_state[message.session_id]
-        else:
-            raise ValueError("Expected ARTICLE_RECORD or EOF_RECORDS")
-        ack()
-
-    def start(self):
-        self.input_queue.start_consuming(self.process_message)
-
-
-class Q3SharedWordsShard:
-    def __init__(self, incoming, outgoing, shard_id):
-        self.input_queue = incoming
-        self.outgoing = outgoing
+        self.control_queue = control_queue
         self.shard_id = shard_id
-        self.sessions = {}
+        self.sessions: dict[str, SharedWordsState] = {}
 
-    def process_message(self, body, ack, nack):
-        message = internal.deserialize(body)
-        state = self.sessions.setdefault(message.session_id, {
-            "english": set(), "french": set(), "received": 0, "expected": None,
-        })
-        if message.is_word_count():
-            if not isinstance(message.result, dict):
-                raise ValueError("Expected a query 3 word payload")
-            language = message.result.get("language")
-            words = message.result.get("words")
-            if not isinstance(words, list):
-                raise ValueError("Expected a list of query 3 words")
-            state["received"] += 1
-            if language in {"en", "fr"}:
-                state["english" if language == "en" else "french"].update(words)
-            elif words:
-                raise ValueError("Non-English/French payload cannot contain words")
-        elif message.is_eof():
-            state["expected"] = message.expected_messages
-        else:
+    def handle(self, message: Message):
+        if not (message.is_word_count() or message.is_eof()):
             raise ValueError("Expected WORD_COUNT or EOF_RECORDS")
+        state = self.sessions.setdefault(message.session_id, SharedWordsState())
+        if message.is_word_count():
+            if not isinstance(message.result, list):
+                raise ValueError("Expected a list of words in each chunk")
+            language = (message.language or "").lower()
+            if language == "en":
+                state.english.update(message.result)
+            elif language == "fr":
+                state.french.update(message.result)
+            # Every chunk counts toward EOF, including other languages.
+            state.input.record_done(None)
+        else:
+            state.input.set_expected_count(message.expected_messages)
 
-        if state["expected"] is not None and state["received"] == state["expected"]:
-            shared = sorted(state["english"] & state["french"])
-            result = Message(
-                MsgType.TOP_LOCAL,
-                message.session_id,
-                shard_id=self.shard_id,
-                result=shared,
-            )
-            self.outgoing.send(internal.serialize(result), routing_key="q3.tops")
+        if state.input.is_complete():
+            shared = sorted(state.english & state.french)
+            produced = 0
+            for index in range(0, len(shared), RESULT_BATCH_SIZE):
+                result = Message(MsgType.QUERY_RESULT, query_id=3,
+                                 result=shared[index:index + RESULT_BATCH_SIZE])
+                self.outgoing.send(internal.serialize(result), routing_key=message.session_id, mandatory=False)
+                produced += 1
+            done = Message(MsgType.DONE, message.session_id, output="output",
+                           shard_id=self.shard_id, produced_count=produced)
+            self.control_queue.send(internal.serialize(done))
+            logging.info("Q3 shard completed session=%s shard=%s chunks=%s shared_words=%s result_batches=%s",
+                         message.session_id, self.shard_id, state.input.processed, len(shared), produced)
             del self.sessions[message.session_id]
-        ack()
-
-    def start(self):
-        self.input_queue.start_consuming(self.process_message)

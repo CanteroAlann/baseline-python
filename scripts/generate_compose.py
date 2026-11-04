@@ -7,7 +7,6 @@ PREPROCESSED_BINDINGS = {
     "preprocessed_pre2020": "article.pre2020",
     "preprocessed_post2020": "article.post2020",
     "word_sharder_queue": "article.*",
-    "q3.preprocessed": "article.*",
 }
 
 RABBITMQ = """  rabbitmq:
@@ -189,39 +188,19 @@ def preprocess(index):
 """
 
 
-def q3_shared_words(shard_count):
-    return f"""  q3-shared-words:
-    build:
-      context: .
-      dockerfile: src/q3_shared_words/Dockerfile
-    environment:
-      PYTHONUNBUFFERED: "1"
-      MOM_HOST: rabbitmq
-      INPUT_QUEUE: q3.preprocessed
-      INPUT_EXCHANGE: preprocessed_articles
-      INPUT_ROUTING_KEY: article.*
-      OUTPUT_EXCHANGE: q3.words
-      SHARD_COUNT: "{shard_count}"
-      INPUT_ROUTE_COUNT: "2"
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-"""
-
-
 def q3_shared_shard(shard_id):
     return f"""  q3-shared-{shard_id}:
     build:
       context: .
       dockerfile: src/q3_shared_words/Dockerfile
-    entrypoint: ["python", "-m", "q3_shared_words.shard_main"]
     environment:
       PYTHONUNBUFFERED: "1"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: q3.shared.{shard_id}
-      INPUT_EXCHANGE: q3.words
-      INPUT_ROUTING_KEY: q3.shared.{shard_id}
-      OUTPUT_EXCHANGE: q3.tops
+      INPUT_EXCHANGE: word_chunks
+      INPUT_ROUTING_KEY: word.shard.{shard_id}
+      OUTPUT_EXCHANGE: article_results
+      CONTROL_QUEUE: control.q3_done
       SHARD_ID: "{shard_id}"
     depends_on:
       rabbitmq:
@@ -229,27 +208,12 @@ def q3_shared_shard(shard_id):
 """
 
 
-def q3_join(shard_count):
-    return f"""  q3-join:
-    build:
-      context: .
-      dockerfile: src/q3_shared_words/Dockerfile
-    entrypoint: ["python", "-m", "q3_shared_words.join_main"]
-    environment:
-      PYTHONUNBUFFERED: "1"
-      MOM_HOST: rabbitmq
-      INPUT_QUEUE: q3.join
-      INPUT_EXCHANGE: q3.tops
-      INPUT_ROUTING_KEY: q3.tops
-      OUTPUT_EXCHANGE: article_results
-      SHARD_COUNT: "{shard_count}"
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-"""
+def word_shard_bindings(shard_count):
+    return {f"{prefix}.{shard_id}": f"word.shard.{shard_id}"
+            for shard_id in range(shard_count) for prefix in ("q3.shared", "q4.sum")}
 
 
-def word_sharder(index, q4_shards):
+def word_sharder(index, word_shards):
     return f"""  word-sharder_{index}:
     build:
       context: .
@@ -260,9 +224,10 @@ def word_sharder(index, q4_shards):
       INPUT_QUEUE: word_sharder_queue
       INPUT_EXCHANGE: preprocessed_articles
       INPUT_ROUTING_KEY: article.*
-      CONTROL_QUEUE: control.q4_sharder
-      OUTPUT_EXCHANGE: q4.words
-      Q4_SHARD_COUNT: "{q4_shards}"
+      CONTROL_QUEUE: control.word_sharder
+      OUTPUT_EXCHANGE: word_chunks
+      OUTPUT_BINDINGS: '{json.dumps(word_shard_bindings(word_shards))}'
+      SHARD_COUNT: "{word_shards}"
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -279,8 +244,8 @@ def q4_sum(shard_id):
       PYTHONUNBUFFERED: "1"
       MOM_HOST: rabbitmq
       INPUT_QUEUE: q4.sum.{shard_id}
-      INPUT_EXCHANGE: q4.words
-      INPUT_ROUTING_KEY: q4.sum.{shard_id}
+      INPUT_EXCHANGE: word_chunks
+      INPUT_ROUTING_KEY: word.shard.{shard_id}
       OUTPUT_QUEUE: q4.join
       SHARD_ID: "{shard_id}"
     depends_on:
@@ -391,9 +356,8 @@ def q5_historical_reducer(historical_shards, candidate_shards):
 
 
 def generate_compose(clients, year_filters, language_filters, q5_word_workers=5,
-                     historical_shards=5, candidate_shards=5, preprocess_workers=5, q4_shards=2,
-                     q3_shards=2, *,
-                     biography_filters=1, image_fetchers=1, q4_sharder_workers=1):
+                     historical_shards=5, candidate_shards=5, preprocess_workers=5, word_shards=3, *,
+                     biography_filters=1, image_fetchers=1, word_sharder_workers=3):
     # Common services
     services = ["services:\n", RABBITMQ]
     filter_names = [f"year-filter_{index}" for index in range(1, year_filters + 1)]
@@ -419,33 +383,34 @@ def generate_compose(clients, year_filters, language_filters, q5_word_workers=5,
         services.append(preprocess(index))
         filter_names.append(f"preprocess_{index}")
 
-    # Q3
-    services.append(q3_shared_words(q3_shards))
-    for shard_id in range(q3_shards):
-        services.append(q3_shared_shard(shard_id))
-    services.append(q3_join(q3_shards))
-    filter_names += ["q3-shared-words", "q3-join"]
-    filter_names += [f"q3-shared-{shard_id}" for shard_id in range(q3_shards)]
-
-    # Q4
-    for index in range(1, q4_sharder_workers + 1):
-        services.append(word_sharder(index, q4_shards))
+    # Shared word partitioning for Q3 and Q4.
+    for index in range(1, word_sharder_workers + 1):
+        services.append(word_sharder(index, word_shards))
         filter_names.append(f"word-sharder_{index}")
     services.append(coordinator(
-      "q4_sharder",
-      "q4.words",
-      tuple(f"q4.sum.{shard_id}" for shard_id in range(q4_shards)),
-      {f"q4.sum.{shard_id}": f"q4.sum.{shard_id}" for shard_id in range(q4_shards)},
-      independent_routes=True,
-      input_routes=("article.pre2020", "article.post2020"),
+        "word_sharder", "word_chunks",
+        tuple(f"word.shard.{shard_id}" for shard_id in range(word_shards)),
+        word_shard_bindings(word_shards), independent_routes=True,
+        input_routes=("article.pre2020", "article.post2020"),
     ))
-    for shard_id in range(q4_shards):
+    filter_names.append("coordinator_word_sharder")
+
+    # Q3 streams disjoint shared-word results directly from each shard.
+    for shard_id in range(word_shards):
+        services.append(q3_shared_shard(shard_id))
+        filter_names.append(f"q3-shared-{shard_id}")
+    services.append(coordinator("q3_final", "article_results", query_id=3,
+                                expected_inputs=word_shards, input_queue="control.q3_done"))
+    filter_names.append("coordinator_q3_final")
+
+    # Q4 aggregates local tops into one global top 20.
+    for shard_id in range(word_shards):
       services.append(q4_sum(shard_id))
       filter_names.append(f"q4-sum-{shard_id}")
-    services.append(q4_join(q4_shards))
+    services.append(q4_join(word_shards))
     services.append(coordinator("q4_final", "article_results", query_id=4,
-                                expected_inputs=q4_shards, input_queue="control.q4_done"))
-    filter_names += ["coordinator_q4_sharder", "q4-join", "coordinator_q4_final"]
+                                expected_inputs=word_shards, input_queue="control.q4_done"))
+    filter_names += ["q4-join", "coordinator_q4_final"]
 
     # Q5
     for branch, count in [("historical", historical_shards), ("candidate", candidate_shards)]:
@@ -497,32 +462,31 @@ def main():
     parser.add_argument("--biography-filters", type=int, default=3, help="biography workers (default: 3)")
     parser.add_argument("--image-fetchers", type=int, default=3, help="image download workers (default: 3)")
     parser.add_argument("--preprocess-workers", type=int, default=3, help="shared preprocessing workers for both year branches")
-    parser.add_argument("--q4-sums", type=int, default=2, help="Q4 word-count shards (default: 2)")
-    parser.add_argument("--q4-sharders", type=int, default=1, help="Q4 sharder workers (default: 1)")
-    parser.add_argument("--q3-shards", type=int, default=2, help="Q3 shared-word shards (default: 2)")
+    parser.add_argument("--word-shards", "--q4-sums", dest="word_shards", type=int, default=3,
+                        help="word partitions shared by Q3/Q4 (default: 3)")
+    parser.add_argument("--word-sharders", "--q4-sharders", dest="word_sharder_workers", type=int, default=3,
+                        help="shared word-sharder workers (default: 3)")
     parser.add_argument("--q5-word-workers", type=int, default=3, help="word-count workers per Q5 branch")
     parser.add_argument("--q5-historical-shards", type=int, default=3)
     parser.add_argument("--q5-candidate-shards", type=int, default=3)
     args = parser.parse_args()
     if args.clients < 0 or min(args.year_filters, args.language_filters, args.q5_word_workers,
                                args.q5_historical_shards, args.q5_candidate_shards, args.preprocess_workers,
-                               args.biography_filters, args.image_fetchers, args.q4_sums,
-                               args.q3_shards, args.q4_sharders) < 1:
+                               args.biography_filters, args.image_fetchers, args.word_shards,
+                               args.word_sharder_workers) < 1:
         parser.error("clients must be >= 0; worker and shard counts must be >= 1")
 
     contents = generate_compose(args.clients, args.year_filters, args.language_filters,
                                 args.q5_word_workers, args.q5_historical_shards, args.q5_candidate_shards,
-                                args.preprocess_workers, q4_shards=args.q4_sums,
-                                q3_shards=args.q3_shards,
+                                args.preprocess_workers, word_shards=args.word_shards,
                                 biography_filters=args.biography_filters,
-                                image_fetchers=args.image_fetchers, q4_sharder_workers=args.q4_sharders)
+                                image_fetchers=args.image_fetchers, word_sharder_workers=args.word_sharder_workers)
     output = PROJECT_ROOT / "docker-compose.yaml"
     output.write_text(contents, encoding="utf-8")
     print(f"Generated {output}: {args.clients} clients, 1 gateway, "
           f"{args.preprocess_workers} preprocessing workers, "
-          f"{args.q4_sums} Q4 sum shards, "
-          f"{args.q4_sharders} Q4 sharder workers, "
-          f"{args.q3_shards} Q3 shared-word shards, "
+          f"{args.word_shards} word shards per query (Q3/Q4), "
+          f"{args.word_sharder_workers} shared word-sharder workers, "
           f"{args.q5_word_workers} Q5 word-count workers, "
           f"{args.q5_historical_shards} Q5 historical shards, "
           f"{args.q5_candidate_shards} Q5 candidate shards, "

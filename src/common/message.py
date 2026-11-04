@@ -24,6 +24,7 @@ class Message:
     produced_count: int | None = None
     word: str | None = None
     input_route: str | None = None
+    language: str | None = None
 
     def is_article(self) -> bool:
         return self.type == MsgType.ARTICLE_RECORD
@@ -80,7 +81,7 @@ class Message:
             data["query_id"] = self.query_id
         if self.is_query_result() or self.type == MsgType.TOP_LOCAL or self.is_word_count():
             data["result"] = self.result
-        for name in ("shard_id", "word_count", "url", "partial_sum", "partial_count", "produced_count", "word"):
+        for name in ("shard_id", "word_count", "url", "partial_sum", "partial_count", "produced_count", "word", "language"):
             value = getattr(self, name)
             if value is not None:
                 data[name] = value
