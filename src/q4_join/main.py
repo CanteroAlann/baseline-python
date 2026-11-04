@@ -12,8 +12,8 @@ def create_output_exchange(incoming):
     return incoming.create_exchange(OUTPUT_EXCHANGE)
 
 
-def create_node(incoming, outgoing):
-    return Q4JoinNode(incoming, outgoing, SHARD_COUNT)
+def create_node(incoming, outgoing, control):
+    return Q4JoinNode(incoming, outgoing, control, SHARD_COUNT)
 
 
 def main():

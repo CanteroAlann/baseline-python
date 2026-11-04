@@ -6,11 +6,11 @@ from common.message_protocol import internal
 
 class CoordinatorNode:
     def __init__(self, input_queue, output_queue, routing_keys=(), query_id=None, *, independent_routes=False,
-                 expected_inputs=None):
+                 expected_inputs=None, input_routes=()):
         self.input_queue = input_queue
         self.output_queue = output_queue
         self.coordinator = Coordinator(self.publish_eof, routing_keys, independent_routes=independent_routes,
-                                       expected_inputs=expected_inputs)
+                                       expected_inputs=expected_inputs, input_routes=input_routes)
         self.query_id = query_id
 
     def publish_eof(self, message: Message, routing_key: str):

@@ -23,6 +23,7 @@ class Message:
     average: float | None = None
     produced_count: int | None = None
     word: str | None = None
+    input_route: str | None = None
 
     def is_article(self) -> bool:
         return self.type == MsgType.ARTICLE_RECORD
@@ -73,6 +74,8 @@ class Message:
             data["expected_messages"] = self.expected_messages
         if self.is_done() or (self.is_input_eof() and self.output is not None):
             data["output"] = self.output
+        if self.is_input_eof() and self.input_route is not None:
+            data["input_route"] = self.input_route
         if self.query_id is not None:
             data["query_id"] = self.query_id
         if self.is_query_result() or self.type == MsgType.TOP_LOCAL or self.is_word_count():

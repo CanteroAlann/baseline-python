@@ -1,10 +1,17 @@
-from collections import defaultdict
-import logging
+from collections import Counter
+from dataclasses import dataclass, field
 
+from common.coordination import CoordinatorState
 from common.enums import MsgType
 from common.message import Message
-from common.message_helper import MessageHelper
+from common.message_helper import MessageHelper, input_state
 from common.message_protocol import internal
+
+
+@dataclass
+class SumState:
+    counts: Counter[str] = field(default_factory=Counter)
+    input: CoordinatorState = field(default_factory=input_state)
 
 
 class Q4SumNode(MessageHelper):
@@ -12,35 +19,20 @@ class Q4SumNode(MessageHelper):
         super().__init__(incoming, None)
         self.outgoing = outgoing
         self.shard_id = shard_id
-        self.sessions = {}
-
-    def process_message(self, body, ack, nack):
-        self.handle(internal.deserialize(body))
-        ack()
+        self.sessions: dict[str, SumState] = {}
 
     def handle(self, message: Message):
-        # el hash es deterministico, asi que cada palabra cae siempre en el mismo shard
-        state = self.sessions.setdefault(message.session_id, {
-            "counts": defaultdict(int), "received": 0, "expected": None,
-        })
-        # logging.info(f"Received message: {message.type} with word {message.word} and count {message.word_count}")
-        if message.type == MsgType.WORD_COUNT:
-            # logging.info("q4_sum shard=%s received WORD_COUNT words=%d", self.shard_id, len(message.result))
-
-            for word in message.result:
-                state["counts"][word] += 1
-            
-            state["received"] += len(message.result)
-
-        elif message.is_eof():
-            state["expected"] = message.expected_messages
-        else:
+        if not (message.is_word_count() or message.is_eof()):
             raise ValueError("Expected WORD_COUNT or EOF_RECORDS")
+        state = self.sessions.setdefault(message.session_id, SumState())
+        if message.is_word_count():
+            state.counts.update(message.result)
+            state.input.record_done(None)
+        else:
+            state.input.set_expected_count(message.expected_messages)
 
-
-        if state["expected"] is not None and state["received"] == state["expected"]:
-            # calcula un top local de palabras y manda el resultado
-            top = sorted(state["counts"].items(), key=lambda item: (-item[1], item[0]))[:20]
+        if state.input.is_complete():
+            top = sorted(state.counts.items(), key=lambda item: (-item[1], item[0]))[:20]
             result = Message(MsgType.TOP_LOCAL, message.session_id, shard_id=self.shard_id, result=top)
-            self.outgoing.send(internal.serialize(result), routing_key="q4.tops")
+            self.outgoing.send(internal.serialize(result))
             del self.sessions[message.session_id]

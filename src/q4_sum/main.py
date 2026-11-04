@@ -4,12 +4,7 @@ from common.node_main import run_node
 from .node import Q4SumNode
 
 
-OUTPUT_EXCHANGE = os.environ["OUTPUT_EXCHANGE"]
 SHARD_ID = int(os.environ["SHARD_ID"])
-
-
-def create_output_exchange(incoming):
-    return incoming.create_exchange(OUTPUT_EXCHANGE)
 
 
 def create_node(incoming, outgoing):
@@ -17,7 +12,7 @@ def create_node(incoming, outgoing):
 
 
 def main():
-    run_node(create_node, output_factory=create_output_exchange)
+    run_node(create_node)
 
 
 if __name__ == "__main__":
