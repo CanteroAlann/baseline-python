@@ -44,8 +44,8 @@ for dir in tests/test_*/; do
     continue
   fi
 
-  # Verificar contra expected 
-  verify_out=$(python3 "$dir/verify.py" 2>&1)
+  # Verificar contra expected con el verificador compartido.
+  verify_out=$(python3 tests/verify.py "$dir" 2>&1)
   vrc=$?
   echo "$verify_out" >>"$log"
 
