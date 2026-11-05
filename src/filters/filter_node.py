@@ -39,18 +39,20 @@ class FilterNode:
     def process_article(self, message: Message) -> str | None:
         article = message.require_article()
         if not self.filter_function(article):
+            if logging.getLogger().isEnabledFor(logging.INFO):
+                logging.info(
+                    "%s discarded article session=%s article_id=%s name=%r language=%r",
+                    type(self).__name__, message.session_id, message.article_id,
+                    article.name, article.in_language,
+                )
+            return None
+        self.publish_message(internal.serialize(message), message)
+        if logging.getLogger().isEnabledFor(logging.INFO):
             logging.info(
-                "%s discarded article session=%s article_id=%s name=%r language=%r",
+                "%s forwarded article session=%s article_id=%s name=%r language=%r",
                 type(self).__name__, message.session_id, message.article_id,
                 article.name, article.in_language,
             )
-            return None
-        self.publish_message(internal.serialize(message), message)
-        logging.info(
-            "%s forwarded article session=%s article_id=%s name=%r language=%r",
-            type(self).__name__, message.session_id, message.article_id,
-            article.name, article.in_language,
-        )
         return "output"
 
     def publish_message(self, body: bytes, message: Message):

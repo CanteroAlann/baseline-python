@@ -1,11 +1,11 @@
 import json
-import logging
 import os
 import signal
 import sys
 
 from common import middleware
 from common.enums import ExitCode
+from common.logging_config import configure_worker_logging
 from .node import CoordinatorNode
 
 MOM_HOST = os.environ["MOM_HOST"]
@@ -20,7 +20,7 @@ INPUT_ROUTES = tuple(filter(None, os.environ.get("INPUT_ROUTES", "").split(","))
 
 
 def main():
-    logging.basicConfig(level=logging.INFO)
+    configure_worker_logging()
     signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(ExitCode.SUCCESS))
     incoming = middleware.MessageMiddlewareQueueRabbitMQ(MOM_HOST, INPUT_QUEUE)
     try:

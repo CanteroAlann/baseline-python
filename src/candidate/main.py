@@ -5,6 +5,7 @@ import sys
 
 from common import middleware
 from common.enums import ExitCode
+from common.logging_config import configure_worker_logging
 from common.message_protocol import internal
 from common.exchange_helper import publisher
 from .node import CandidateShard
@@ -20,7 +21,7 @@ SHARD_ID = int(os.environ["SHARD_ID"])
 
 
 def main():
-    logging.basicConfig(level=logging.INFO)
+    configure_worker_logging()
     signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(ExitCode.SUCCESS))
     incoming = middleware.MessageMiddlewareQueueRabbitMQ(MOM_HOST, INPUT_QUEUE)
     try:

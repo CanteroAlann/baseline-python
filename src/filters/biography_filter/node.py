@@ -10,9 +10,9 @@ from filters.filter_node import FilterNode
 """Devuelve True si el artículo tiene una sección de biography/biographie, False en caso contrario."""
 def filter_by_biography(article: ExternalArticle) -> bool:
     has_bio = article.has_biography
-    has_img = article.image_url is not None
-
-    logging.info(f"filter_by_biography: article={article.name!r}, ¿biography?={has_bio}, ¿image?={has_img}")
+    if logging.getLogger().isEnabledFor(logging.INFO):
+        logging.info("filter_by_biography: article=%r, ¿biography?=%s, ¿image?=%s",
+                     article.name, has_bio, article.image_url is not None)
     # NOTE: tenga o no la url con la imagen se debe pasar igual (interpretacion del ipynb), va al image fetcher pero no hace nada
     return has_bio
 

@@ -19,7 +19,8 @@ def extract_non_stopwords_from_abstract(paragraph):
 
 
     filtered = [word for word in words if word not in STOP_WORDS and not re.fullmatch(NUMBER_REGEX, word)]
-    logging.info(f"Abstract filtered ({len(set(filtered))}): {filtered[:10]}...")
+    if logging.getLogger().isEnabledFor(logging.INFO):
+        logging.info("Abstract filtered (%s): %s...", len(set(filtered)), filtered[:10])
    
     return filtered
 

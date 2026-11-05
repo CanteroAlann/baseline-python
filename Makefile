@@ -4,6 +4,8 @@ BACKEND_COMPOSE = docker compose -f docker-compose.yaml
 CLIENTS_COMPOSE = docker compose -f docker-compose.clients.yaml
 
 IGNORE_RABBITMQ_LOGS ?= true
+WORKER_LOGS ?= false
+export WORKER_LOGS
 SERVICES_TO_LOG = $(shell $(BACKEND_COMPOSE) config --services | grep -v "rabbitmq")
 
 backend:

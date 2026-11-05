@@ -437,7 +437,8 @@ def generate_compose(year_filters, language_filters, q5_word_workers=5,
     services.append(f"\nnetworks:\n  default:\n    name: {NETWORK_NAME}\n")
     return "".join(services).replace(
         '      PYTHONUNBUFFERED: "1"\n',
-        '      PYTHONUNBUFFERED: "1"\n      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"\n',
+        '      PYTHONUNBUFFERED: "1"\n      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"\n'
+        '      WORKER_LOGS: "${WORKER_LOGS:-false}"\n',
     )
 
 

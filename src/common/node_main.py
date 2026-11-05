@@ -5,6 +5,7 @@ import sys
 
 from common import middleware
 from common.enums import ExitCode
+from common.logging_config import configure_worker_logging
 
 MOM_HOST = os.environ["MOM_HOST"]
 INPUT_QUEUE = os.environ["INPUT_QUEUE"]
@@ -15,7 +16,7 @@ CONTROL_QUEUE = os.environ.get("CONTROL_QUEUE")
 
 
 def run_node(node_class, output_factory=None):
-    logging.basicConfig(level=logging.INFO)
+    configure_worker_logging()
     signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(ExitCode.SUCCESS))
     input_queue = middleware.MessageMiddlewareQueueRabbitMQ(
         MOM_HOST, INPUT_QUEUE,

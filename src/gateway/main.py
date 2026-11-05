@@ -10,6 +10,7 @@ from common.coordination import non_negative
 from common.message import Message
 from common.message_protocol import external as protocol
 from common.enums import ExitCode, MsgType, QUERY_COUNT
+from common.logging_config import configure_worker_logging
 
 from .message_handler import MessageHandler
 from .client_socket import ClientSocket
@@ -122,7 +123,7 @@ OUTPUT_QUEUE = os.environ["OUTPUT_QUEUE"]
 
 
 def handle_client_process(client_socket):
-    logging.basicConfig(level=logging.INFO, format="%(processName)s[%(process)d] %(levelname)s %(message)s")
+    configure_worker_logging(format="%(processName)s[%(process)d] %(levelname)s %(message)s")
     signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(ExitCode.SUCCESS))
     signal.signal(signal.SIGINT, lambda signum, frame: sys.exit(ExitCode.SUCCESS))
     output_queue = None
@@ -142,7 +143,7 @@ def handle_client_process(client_socket):
 
 
 def main():
-    logging.basicConfig(level=logging.INFO)
+    configure_worker_logging()
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
         server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         server_socket.bind((SERVER_HOST, SERVER_PORT))
