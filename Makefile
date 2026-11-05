@@ -1,32 +1,37 @@
 SHELL := /bin/bash
-PWD := $(shell pwd)
+.DEFAULT_GOAL := up
+BACKEND_COMPOSE = docker compose -f docker-compose.yaml
+CLIENTS_COMPOSE = docker compose -f docker-compose.clients.yaml
 
 IGNORE_RABBITMQ_LOGS ?= true
-SERVICES_TO_LOG = $(shell docker compose -f docker-compose.yaml config --services | grep -v "rabbitmq")
+SERVICES_TO_LOG = $(shell $(BACKEND_COMPOSE) config --services | grep -v "rabbitmq")
 
-up:
+backend:
+	$(BACKEND_COMPOSE) up --build --remove-orphans --detach --wait
+
+clients:
 	mkdir -p output
-	COMPOSE_HTTP_TIMEOUT=300 docker compose -f docker-compose.yaml up --build --remove-orphans --detach
-ifeq ($(IGNORE_RABBITMQ_LOGS),true)
-	docker compose -f docker-compose.yaml logs --follow $(SERVICES_TO_LOG)
-else
-	docker compose -f docker-compose.yaml logs --follow
-endif
+	$(CLIENTS_COMPOSE) up --build --remove-orphans --force-recreate
+
+up: backend
+	$(MAKE) clients
 
 down:
-	docker compose -f docker-compose.yaml stop -t 5
-	docker compose -f docker-compose.yaml down
-.PHONY: down
+	$(CLIENTS_COMPOSE) down --remove-orphans --timeout 5
+	$(BACKEND_COMPOSE) down --remove-orphans --timeout 5
 
 logs:
-	docker compose -f docker-compose.yaml logs
-.PHONY: logs
+ifeq ($(IGNORE_RABBITMQ_LOGS),true)
+	$(BACKEND_COMPOSE) logs $(SERVICES_TO_LOG)
+else
+	$(BACKEND_COMPOSE) logs
+endif
+	$(CLIENTS_COMPOSE) logs
 
 logs-ignore:
-	docker compose -f docker-compose.yaml logs --follow $(SERVICES_TO_LOG)
-#	docker compose -f docker-compose.yaml logs | grep -ivE "pika.|rabbitmq"
-# otra es ignorar todo lo que diga 'pika.' pero pierdo los colores en la consola
-.PHONY: logs-ignore
+	$(BACKEND_COMPOSE) logs --follow $(SERVICES_TO_LOG)
 
 test:
 	bash tests/run_all.sh
+
+.PHONY: backend clients up down logs logs-ignore test

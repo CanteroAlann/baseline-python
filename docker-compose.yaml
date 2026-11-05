@@ -236,6 +236,57 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
+  preprocess_4:
+    build:
+      context: .
+      dockerfile: src/preprocess/Dockerfile
+    environment:
+      PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
+      MOM_HOST: rabbitmq
+      INPUT_QUEUE: articles_to_preprocess
+      INPUT_EXCHANGE: articles_by_year
+      INPUT_ROUTING_KEY: article.*
+      OUTPUT_EXCHANGE: preprocessed_articles
+      OUTPUT_BINDINGS: '{"preprocessed_pre2020": "article.pre2020", "preprocessed_post2020": "article.post2020", "word_sharder_queue": "article.*"}'
+      CONTROL_QUEUE: control.preprocess
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+  preprocess_5:
+    build:
+      context: .
+      dockerfile: src/preprocess/Dockerfile
+    environment:
+      PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
+      MOM_HOST: rabbitmq
+      INPUT_QUEUE: articles_to_preprocess
+      INPUT_EXCHANGE: articles_by_year
+      INPUT_ROUTING_KEY: article.*
+      OUTPUT_EXCHANGE: preprocessed_articles
+      OUTPUT_BINDINGS: '{"preprocessed_pre2020": "article.pre2020", "preprocessed_post2020": "article.post2020", "word_sharder_queue": "article.*"}'
+      CONTROL_QUEUE: control.preprocess
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+  preprocess_6:
+    build:
+      context: .
+      dockerfile: src/preprocess/Dockerfile
+    environment:
+      PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
+      MOM_HOST: rabbitmq
+      INPUT_QUEUE: articles_to_preprocess
+      INPUT_EXCHANGE: articles_by_year
+      INPUT_ROUTING_KEY: article.*
+      OUTPUT_EXCHANGE: preprocessed_articles
+      OUTPUT_BINDINGS: '{"preprocessed_pre2020": "article.pre2020", "preprocessed_post2020": "article.post2020", "word_sharder_queue": "article.*"}'
+      CONTROL_QUEUE: control.preprocess
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
   word-sharder_1:
     build:
       context: .
@@ -273,6 +324,60 @@ services:
       rabbitmq:
         condition: service_healthy
   word-sharder_3:
+    build:
+      context: .
+      dockerfile: src/word_sharder/Dockerfile
+    environment:
+      PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
+      MOM_HOST: rabbitmq
+      INPUT_QUEUE: word_sharder_queue
+      INPUT_EXCHANGE: preprocessed_articles
+      INPUT_ROUTING_KEY: article.*
+      CONTROL_QUEUE: control.word_sharder
+      OUTPUT_EXCHANGE: word_chunks
+      OUTPUT_BINDINGS: '{"q3.shared.0": "word.shard.0", "q4.sum.0": "word.shard.0", "q3.shared.1": "word.shard.1", "q4.sum.1": "word.shard.1", "q3.shared.2": "word.shard.2", "q4.sum.2": "word.shard.2"}'
+      SHARD_COUNT: "3"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+  word-sharder_4:
+    build:
+      context: .
+      dockerfile: src/word_sharder/Dockerfile
+    environment:
+      PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
+      MOM_HOST: rabbitmq
+      INPUT_QUEUE: word_sharder_queue
+      INPUT_EXCHANGE: preprocessed_articles
+      INPUT_ROUTING_KEY: article.*
+      CONTROL_QUEUE: control.word_sharder
+      OUTPUT_EXCHANGE: word_chunks
+      OUTPUT_BINDINGS: '{"q3.shared.0": "word.shard.0", "q4.sum.0": "word.shard.0", "q3.shared.1": "word.shard.1", "q4.sum.1": "word.shard.1", "q3.shared.2": "word.shard.2", "q4.sum.2": "word.shard.2"}'
+      SHARD_COUNT: "3"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+  word-sharder_5:
+    build:
+      context: .
+      dockerfile: src/word_sharder/Dockerfile
+    environment:
+      PYTHONUNBUFFERED: "1"
+      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
+      MOM_HOST: rabbitmq
+      INPUT_QUEUE: word_sharder_queue
+      INPUT_EXCHANGE: preprocessed_articles
+      INPUT_ROUTING_KEY: article.*
+      CONTROL_QUEUE: control.word_sharder
+      OUTPUT_EXCHANGE: word_chunks
+      OUTPUT_BINDINGS: '{"q3.shared.0": "word.shard.0", "q4.sum.0": "word.shard.0", "q3.shared.1": "word.shard.1", "q4.sum.1": "word.shard.1", "q3.shared.2": "word.shard.2", "q4.sum.2": "word.shard.2"}'
+      SHARD_COUNT: "3"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+  word-sharder_6:
     build:
       context: .
       dockerfile: src/word_sharder/Dockerfile
@@ -858,131 +963,7 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
-  client_1:
-    build:
-      context: .
-      dockerfile: src/client/Dockerfile
-    environment:
-      PYTHONUNBUFFERED: "1"
-      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
-      INPUT_FILE: /data/file1.csv
-      SERVER_HOST: gateway_1
-      SERVER_PORT: "5000"
-    volumes:
-      - ./samples:/data:ro
-      - ./output/client_1:/output
-    depends_on:
-      - gateway_1
-      - year-filter_1
-      - year-filter_2
-      - year-filter_3
-      - language-filter_1
-      - language-filter_2
-      - language-filter_3
-      - coordinator_preprocess
-      - preprocess_1
-      - preprocess_2
-      - preprocess_3
-      - word-sharder_1
-      - word-sharder_2
-      - word-sharder_3
-      - coordinator_word_sharder
-      - q3-shared-0
-      - q3-shared-1
-      - q3-shared-2
-      - coordinator_q3_final
-      - q4-sum-0
-      - q4-sum-1
-      - q4-sum-2
-      - q4-join
-      - coordinator_q4_final
-      - q5-historical-words_1
-      - q5-historical-words_2
-      - q5-historical-words_3
-      - q5-candidate-words_1
-      - q5-candidate-words_2
-      - q5-candidate-words_3
-      - q5-historical_1
-      - q5-historical_2
-      - q5-historical_3
-      - q5-candidate_1
-      - q5-candidate_2
-      - q5-candidate_3
-      - q5-historical-reducer
-      - coordinator_q5_final
-      - coordinator_q5_historical_words
-      - coordinator_q5_candidate_words
-      - image-fetcher_1
-      - image-fetcher_2
-      - image-fetcher_3
-      - biography-filter_1
-      - biography-filter_2
-      - biography-filter_3
-      - coordinator_year
-      - coordinator_language
-      - coordinator_biography
-      - coordinator_images
-  client_2:
-    build:
-      context: .
-      dockerfile: src/client/Dockerfile
-    environment:
-      PYTHONUNBUFFERED: "1"
-      INTERNAL_SERIALIZER: "${INTERNAL_SERIALIZER:-json}"
-      INPUT_FILE: /data/file2.csv
-      SERVER_HOST: gateway_1
-      SERVER_PORT: "5000"
-    volumes:
-      - ./samples:/data:ro
-      - ./output/client_2:/output
-    depends_on:
-      - gateway_1
-      - year-filter_1
-      - year-filter_2
-      - year-filter_3
-      - language-filter_1
-      - language-filter_2
-      - language-filter_3
-      - coordinator_preprocess
-      - preprocess_1
-      - preprocess_2
-      - preprocess_3
-      - word-sharder_1
-      - word-sharder_2
-      - word-sharder_3
-      - coordinator_word_sharder
-      - q3-shared-0
-      - q3-shared-1
-      - q3-shared-2
-      - coordinator_q3_final
-      - q4-sum-0
-      - q4-sum-1
-      - q4-sum-2
-      - q4-join
-      - coordinator_q4_final
-      - q5-historical-words_1
-      - q5-historical-words_2
-      - q5-historical-words_3
-      - q5-candidate-words_1
-      - q5-candidate-words_2
-      - q5-candidate-words_3
-      - q5-historical_1
-      - q5-historical_2
-      - q5-historical_3
-      - q5-candidate_1
-      - q5-candidate_2
-      - q5-candidate_3
-      - q5-historical-reducer
-      - coordinator_q5_final
-      - coordinator_q5_historical_words
-      - coordinator_q5_candidate_words
-      - image-fetcher_1
-      - image-fetcher_2
-      - image-fetcher_3
-      - biography-filter_1
-      - biography-filter_2
-      - biography-filter_3
-      - coordinator_year
-      - coordinator_language
-      - coordinator_biography
-      - coordinator_images
+
+networks:
+  default:
+    name: tp-distribuidos
