@@ -1,4 +1,5 @@
 from enum import IntEnum
+import os
 
 
 class ExitCode(IntEnum):
@@ -23,5 +24,10 @@ class MsgType(IntEnum):
 
 QUERY_IDS = (1, 2, 3, 4, 5)
 # Keep this aligned with the services in generate_compose.py
-ENABLED_QUERY_IDS = (1, 2, 3, 4, 5)
+# Override con ENABLED_QUERY_IDS para tests
+ENABLED_QUERY_IDS = tuple(
+    int(q) for q in os.environ.get("ENABLED_QUERY_IDS", "1,2,3,4,5").split(",") if q.strip()
+)
+
+
 QUERY_COUNT = len(ENABLED_QUERY_IDS)

@@ -1,0 +1,5 @@
+abstract,additional_entities,date_created,date_modified,description,event,identifier,image,in_language,infoboxes,is_part_of,license,main_entity,name,references,sections,tables,url,version
+"An English article from 2019",,,2019-06-15 12:00:00,,,,"","{""identifier"": ""en""}",,,,,Article EN 2019,,,,"https://en.wikipedia.org/wiki/EN2019",
+"An English article from 2021",,,2021-03-20 08:30:00,,,,"","{""identifier"": ""en""}",,,,,Article EN 2021,,,,"https://en.wikipedia.org/wiki/EN2021",
+"Un article francais de 2019",,,2019-11-01 10:00:00,,,,"","{""identifier"": ""fr""}",,,,,Article FR 2019,,,,"https://fr.wikipedia.org/wiki/FR2019",
+"Another English article from 2020",,,2020-12-31 23:59:59,,,,"","{""identifier"": ""en""}",,,,,Article EN 2020,,,,"https://en.wikipedia.org/wiki/EN2020",
