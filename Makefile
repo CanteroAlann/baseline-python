@@ -27,3 +27,6 @@ logs-ignore:
 #	docker compose -f docker-compose.yaml logs | grep -ivE "pika.|rabbitmq"
 # otra es ignorar todo lo que diga 'pika.' pero pierdo los colores en la consola
 .PHONY: logs-ignore
+
+test:
+	bash tests/run_all.sh

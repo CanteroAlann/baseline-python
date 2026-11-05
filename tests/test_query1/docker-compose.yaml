@@ -1,0 +1,117 @@
+services:
+  rabbitmq:
+    build:
+      context: ../../
+      dockerfile: src/rabbitmq/Dockerfile
+    environment:
+      RABBITMQ_LOG_LEVELS: error
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 50s
+
+  gateway_1:
+    build:
+      context: ../../
+      dockerfile: src/gateway/Dockerfile
+    environment:
+      PYTHONUNBUFFERED: "1"
+      ENABLED_QUERY_IDS: "1"
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: "5000"
+      MOM_HOST: rabbitmq
+      RESULT_EXCHANGE: article_results
+      OUTPUT_QUEUE: articles
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  year-filter_1:
+    build:
+      context: ../../
+      dockerfile: src/filters/year_filter/Dockerfile
+    environment:
+      PYTHONUNBUFFERED: "1"
+      MOM_HOST: rabbitmq
+      INPUT_QUEUE: articles
+      CONTROL_QUEUE: control.year
+      OUTPUT_EXCHANGE: articles_by_year
+      PRE2020_QUEUE: articles_pre2020
+      PREPROCESS_QUEUE: articles_to_preprocess
+      PREPROCESS_ROUTING_KEY: article.*
+      BIOGRAPHY_QUEUE: articles_biography
+      PRE2020_ROUTING_KEY: article.pre2020
+      POST2020_ROUTING_KEY: article.post2020
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  coordinator_year:
+    build:
+      context: ../../
+      dockerfile: src/coordinator/Dockerfile
+    environment:
+      PYTHONUNBUFFERED: "1"
+      MOM_HOST: rabbitmq
+      INPUT_QUEUE: control.year
+      OUTPUT_EXCHANGE: articles_by_year
+      OUTPUT_ROUTING_KEYS: 'article.pre2020,article.post2020'
+      OUTPUT_BINDINGS: '{"articles_pre2020": "article.pre2020", "articles_to_preprocess": "article.*", "articles_biography": "article.pre2020"}'
+      QUERY_ID: ''
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  language-filter_1:
+    build:
+      context: ../../
+      dockerfile: src/filters/language_filter/Dockerfile
+    environment:
+      PYTHONUNBUFFERED: "1"
+      MOM_HOST: rabbitmq
+      INPUT_QUEUE: articles_pre2020
+      CONTROL_QUEUE: control.language
+      INPUT_EXCHANGE: articles_by_year
+      INPUT_ROUTING_KEY: article.pre2020
+      OUTPUT_EXCHANGE: article_results
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  coordinator_language:
+    build:
+      context: ../../
+      dockerfile: src/coordinator/Dockerfile
+    environment:
+      PYTHONUNBUFFERED: "1"
+      MOM_HOST: rabbitmq
+      INPUT_QUEUE: control.language
+      OUTPUT_EXCHANGE: article_results
+      OUTPUT_ROUTING_KEYS: ''
+      OUTPUT_BINDINGS: '{}'
+      QUERY_ID: '1'
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  client_1:
+    build:
+      context: ../../
+      dockerfile: src/client/Dockerfile
+    environment:
+      PYTHONUNBUFFERED: "1"
+      ENABLED_QUERY_IDS: "1"
+      INPUT_FILE: /data/file1.csv
+      SERVER_HOST: gateway_1
+      SERVER_PORT: "5000"
+    volumes:
+      - ./data:/data:ro
+      - ./output:/output
+    depends_on:
+      - gateway_1
+      - year-filter_1
+      - language-filter_1
+      - coordinator_year
+      - coordinator_language

@@ -1,0 +1,1 @@
+[["né", 4], ["mort", 3], ["ahmed", 2], ["août", 2], ["politician", 2], ["ville", 2], ["abesadze", 1], ["acting", 1], ["actress", 1], ["akhmedov", 1], ["albert", 1], ["amédée", 1], ["anton", 1], ["après", 1], ["ashoush", 1], ["association", 1], ["athanásios", 1], ["athlète", 1], ["athènes", 1], ["bakhtiyar", 1]]
