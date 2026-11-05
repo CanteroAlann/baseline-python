@@ -33,9 +33,11 @@ def _process_client_request(client_socket, output_queue, handler):
         msg_type, payload = protocol.recv_msg(client_socket)
         if msg_type == MsgType.ARTICLE_RECORD:
             output_queue.send(handler.serialize_data_message(payload))
+            output_queue.process_events()
         elif msg_type == MsgType.ARTICLE_BATCH:
             for article in payload:
                 output_queue.send(handler.serialize_data_message(article))
+                output_queue.process_events()
         elif msg_type == MsgType.EOF_RECORDS:
             output_queue.send(handler.serialize_eof_message())
             logging.info("Published input EOF session=%s", handler.session_id)
@@ -96,8 +98,9 @@ def handle_client_request(client_socket, output_queue, input_queue=None, query_c
             "Bound private results queue=%s session=%s",
             input_queue.queue_name, handler.session_id,
         )
+        input_queue.register_consumer(consume_result)
         _process_client_request(client_socket, output_queue, handler)
-        input_queue.start_consuming(consume_result)
+        input_queue.start_consuming()
     finally:
         try:
             input_queue.stop_consuming()

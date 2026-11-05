@@ -8,6 +8,7 @@ import time
 import base64
 import json
 import re
+from threading import Thread
 
 from common.article import ExternalArticle
 from common.message import Message
@@ -126,6 +127,38 @@ class Client:
         if self.server_socket is not None:
             self.server_socket.close()
             self.server_socket = None
+
+    def process_articles(self, file_path, query_count=QUERY_COUNT):
+        upload_errors = []
+
+        def upload():
+            try:
+                self.send_article_records(file_path)
+            except Exception as exc:
+                upload_errors.append(exc)
+                self._shutdown_socket()
+
+        uploader = Thread(target=upload, name="article-upload")
+        uploader.start()
+        try:
+            results = self.recv_query_results(query_count)
+        except BaseException as exc:
+            self._shutdown_socket()
+            uploader.join()
+            if isinstance(exc, Exception) and upload_errors:
+                raise upload_errors[0]
+            raise
+        uploader.join()
+        if upload_errors:
+            raise upload_errors[0]
+        return results
+
+    def _shutdown_socket(self):
+        if self.server_socket is not None:
+            try:
+                self.server_socket.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
 
     def send_article_records(self, file_path):
         logging.info("Sending article records")

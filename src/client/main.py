@@ -16,8 +16,7 @@ def main():
     client = Client()
     try:
         client.connect(SERVER_HOST, SERVER_PORT)
-        client.send_article_records(INPUT_FILE)
-        results = client.recv_query_results()
+        results = client.process_articles(INPUT_FILE)
         client.save_results(results)
     except (OSError, EOFError, ValueError, KeyError, csv.Error) as exc:
         logging.error("Client failed: %s", exc)
