@@ -7,6 +7,8 @@ from . import external_serializer as serializer
 from . import internal
 
 MAX_FIELD_SIZE = 64 * 1024 * 1024
+MAX_ARTICLE_BATCH_SIZE = 1_000_000
+ARTICLE_BATCH_HEADER_SIZE = 3 * serializer.UINT32_SIZE
 
 
 def _recv_uint32(sock):
@@ -38,6 +40,32 @@ def _recv_article_record(sock):
     return ExternalArticle.deserialize(_recv_string(sock))
 
 
+def _recv_article_batch(sock):
+    size = _recv_uint32(sock)
+    if not serializer.UINT32_SIZE <= size <= MAX_ARTICLE_BATCH_SIZE - 2 * serializer.UINT32_SIZE:
+        raise ValueError("Invalid article batch size")
+    payload = custom_socket.recv_all(sock, size)
+    count = serializer.deserialize_uint32(payload[:serializer.UINT32_SIZE])
+    position = serializer.UINT32_SIZE
+    if count == 0 or count > (size - position) // serializer.UINT32_SIZE:
+        raise ValueError("Invalid article batch count")
+    articles = []
+    for _ in range(count):
+        end = position + serializer.UINT32_SIZE
+        if end > size:
+            raise ValueError("Wrong article batch length")
+        article_size = serializer.deserialize_uint32(payload[position:end])
+        position = end
+        end = position + article_size
+        if article_size == 0 or end > size:
+            raise ValueError("Invalid article length in batch")
+        articles.append(ExternalArticle.deserialize(payload[position:end]))
+        position = end
+    if position != size:
+        raise ValueError("Unexpected bytes in article batch")
+    return articles
+
+
 def _recv_article_results(sock):
     count = _recv_uint32(sock)
     results = []
@@ -61,10 +89,23 @@ def _send_query_message(sock, message: Message):
                            + _serialize_bytes(internal.serialize(message)))
 
 
-def _send_article_record(sock, article):
+def _send_article_record(sock, article: ExternalArticle | bytes):
     message = serializer.serialize_uint32(MsgType.ARTICLE_RECORD)
-    message += _serialize_bytes(article.serialize())
+    message += _serialize_bytes(article if isinstance(article, bytes) else article.serialize())
     custom_socket.send_all(sock, message)
+
+
+def _send_article_batch(sock, articles: list[bytes]):
+    if not articles or any(not article for article in articles):
+        raise ValueError("Article batches must contain nonempty records")
+    size = ARTICLE_BATCH_HEADER_SIZE + sum(serializer.UINT32_SIZE + len(article) for article in articles)
+    if size > MAX_ARTICLE_BATCH_SIZE:
+        raise ValueError("Article batch exceeds maximum size")
+    payload = bytearray(serializer.serialize_uint32(len(articles)))
+    for article in articles:
+        payload.extend(_serialize_bytes(article))
+    frame = serializer.serialize_uint32(MsgType.ARTICLE_BATCH) + _serialize_bytes(payload)
+    custom_socket.send_all(sock, frame)
 
 
 def _send_article_results(sock, results):
@@ -85,6 +126,7 @@ def _send_eof_records(sock):
 
 RECV_MSG_HANDLERS = {
     MsgType.ARTICLE_RECORD: _recv_article_record,
+    MsgType.ARTICLE_BATCH: _recv_article_batch,
     MsgType.ARTICLE_RESULTS: _recv_article_results,
     MsgType.ACK: _recv_empty,
     MsgType.EOF_RECORDS: _recv_empty,
@@ -94,6 +136,7 @@ RECV_MSG_HANDLERS = {
 
 SEND_MSG_HANDLERS = {
     MsgType.ARTICLE_RECORD: _send_article_record,
+    MsgType.ARTICLE_BATCH: _send_article_batch,
     MsgType.ARTICLE_RESULTS: _send_article_results,
     MsgType.ACK: _send_ack,
     MsgType.EOF_RECORDS: _send_eof_records,

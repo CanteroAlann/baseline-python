@@ -12,6 +12,7 @@ import re
 from common.article import ExternalArticle
 from common.message import Message
 from common.message_protocol import external as protocol
+from common.message_protocol.external_serializer import UINT32_SIZE
 
 DEFAULT_TIMEOUT = 1800
 CSV_ENCODING = "utf-8-sig"
@@ -137,14 +138,28 @@ class Client:
                 raise ValueError(f"{file_path}: missing field names in CSV header")
             
             count=0
+            batch = []
+            batch_size = protocol.ARTICLE_BATCH_HEADER_SIZE
             for article in reader:
                 if None in article or any(value is None for value in article.values()):
                     raise ValueError(f"{file_path}: malformed CSV record")
 
-                # logging.info("Sending article record: %s", article)
-                count+=1
-                
-                protocol.send_msg(self.server_socket, MsgType.ARTICLE_RECORD, ExternalArticle(article))
+                record = ExternalArticle(article)
+                serialized = record.serialize()
+                record_size = UINT32_SIZE + len(serialized)
+                if batch and batch_size + record_size > protocol.MAX_ARTICLE_BATCH_SIZE:
+                    protocol.send_msg(self.server_socket, MsgType.ARTICLE_BATCH, batch)
+                    batch = []
+                    batch_size = protocol.ARTICLE_BATCH_HEADER_SIZE
+                if batch_size + record_size > protocol.MAX_ARTICLE_BATCH_SIZE:
+                    # Large articles may not fit
+                    protocol.send_msg(self.server_socket, MsgType.ARTICLE_RECORD, serialized)
+                else:
+                    batch.append(serialized)
+                    batch_size += record_size
+                count += 1
+            if batch:
+                protocol.send_msg(self.server_socket, MsgType.ARTICLE_BATCH, batch)
             logging.info("Amount of records sent: %d", count)
         
         protocol.send_msg(self.server_socket, MsgType.EOF_RECORDS)

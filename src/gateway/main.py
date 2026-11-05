@@ -30,15 +30,18 @@ bloque de recepción de mensajes del cliente y publicación en la cola de salida
 def _process_client_request(client_socket, output_queue, handler):
     logging.info("Started client session=%s", handler.session_id)
     while True:
-        msg_type, article = protocol.recv_msg(client_socket)
+        msg_type, payload = protocol.recv_msg(client_socket)
         if msg_type == MsgType.ARTICLE_RECORD:
-            output_queue.send(handler.serialize_data_message(article))
+            output_queue.send(handler.serialize_data_message(payload))
+        elif msg_type == MsgType.ARTICLE_BATCH:
+            for article in payload:
+                output_queue.send(handler.serialize_data_message(article))
         elif msg_type == MsgType.EOF_RECORDS:
             output_queue.send(handler.serialize_eof_message())
             logging.info("Published input EOF session=%s", handler.session_id)
             break
         else:
-            raise ValueError("Expected ARTICLE_RECORD or EOF_RECORDS")
+            raise ValueError("Expected ARTICLE_RECORD, ARTICLE_BATCH or EOF_RECORDS")
 
 
 def handle_client_request(client_socket, output_queue, input_queue=None, query_count=QUERY_COUNT):

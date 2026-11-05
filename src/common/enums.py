@@ -19,6 +19,7 @@ class MsgType(IntEnum):
     HIST_PARTIAL = 10
     AVG_READY = 11
     TOP_LOCAL = 12
+    ARTICLE_BATCH = 13
 
 
 QUERY_IDS = (1, 2, 3, 4, 5)
